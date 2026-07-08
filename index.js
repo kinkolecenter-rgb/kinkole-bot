@@ -304,8 +304,12 @@ async function connecterWhatsApp() {
       console.log('✅ WhatsApp connecté !');
       global.currentQR = null;
       global.botConnected = true;
-      await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
-        '🤖 *Bot Kinkole démarré !*\n\nEnvoie *menu* pour commencer.');
+      
+      // Ajout d'un délai de 3 secondes (3000 ms) avant l'envoi du premier message
+      setTimeout(async () => {
+        await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
+          '🤖 *Ass EvaelD démarré !*\n\nEnvoie *menu* pour commencer.');
+      }, 3000);
     }
   });
 
