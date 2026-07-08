@@ -289,7 +289,7 @@ async function connecterWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('🔗 SCANNE CE QR CODE AVEC WHATSAPP (numéro 243822354197)');
+      console.log('🔗 SCANNE CE QR CODE AVEC WHATSAPP (numéro 243834543570)');
       global.currentQR = qr;
       global.botConnected = false;
     }
