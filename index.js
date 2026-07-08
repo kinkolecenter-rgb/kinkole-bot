@@ -275,11 +275,12 @@ async function traiterMessage(jid, texte) {
 // ============ CONNEXION WHATSAPP ============
 async function connecterWhatsApp() {
   const { version } = await fetchLatestBaileysVersion();
-  const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info_v2');
+  const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info');
+
   sock = makeWASocket({
     version,
     auth: authState,
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     browser: ['Kinkole Bot', 'Chrome', '1.0.0'],
   });
 
@@ -289,9 +290,15 @@ async function connecterWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('🔗 SCANNE CE QR CODE AVEC WHATSAPP (numéro 243834543570)');
       global.currentQR = qr;
       global.botConnected = false;
+      try {
+        const code = await sock.requestPairingCode(process.env.WA_NUMBER || '243834543570');
+        console.log('🔑 PAIRING CODE:', code);
+        global.pairingCode = code;
+      } catch(e) {
+        console.log('Pairing code error:', e.message);
+      }
     }
 
     if (connection === 'close') {
@@ -303,13 +310,10 @@ async function connecterWhatsApp() {
     } else if (connection === 'open') {
       console.log('✅ WhatsApp connecté !');
       global.currentQR = null;
+      global.pairingCode = null;
       global.botConnected = true;
-      
-      // Ajout d'un délai de 3 secondes (3000 ms) avant l'envoi du premier message
-      setTimeout(async () => {
-        await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
-          '🤖 *Ass EvaelD démarré !*\n\nEnvoie *menu* pour commencer.');
-      }, 3000);
+      await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
+        '🤖 *Bot Kinkole démarré !*\n\nEnvoie *menu* pour commencer.');
     }
   });
 
@@ -337,7 +341,20 @@ async function connecterWhatsApp() {
 const server = http.createServer(async (req, res) => {
   if (global.botConnected) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end('<h1>✅ Bot Kinkole connecté et actif !</h1>');
+    res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px">✅ Bot Kinkole connecté et actif !</h1>');
+    return;
+  }
+  if (global.pairingCode) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(`
+      <html><body style="text-align:center;font-family:sans-serif;padding:40px">
+      <h2>🤖 Bot Kinkole - Connexion</h2>
+      <p>Entre ce code dans WhatsApp :</p>
+      <h1 style="font-size:48px;letter-spacing:8px;color:#25D366">${global.pairingCode}</h1>
+      <p>WhatsApp → ⋮ → Appareils connectés → Connecter avec numéro de téléphone</p>
+      <p><small>Rafraîchis la page si le code expire</small></p>
+      </body></html>
+    `);
     return;
   }
   if (global.currentQR) {
@@ -347,7 +364,6 @@ const server = http.createServer(async (req, res) => {
       res.end(`
         <html><body style="text-align:center;font-family:sans-serif;padding:20px">
         <h2>🤖 Bot Kinkole - Scanner le QR Code</h2>
-        <p>Ouvre WhatsApp sur le numéro <b>243822354197</b> → Appareils connectés → Connecter</p>
         <img src="${qrImage}" style="width:300px;height:300px"/>
         <p><small>Rafraîchis la page si le QR expire</small></p>
         </body></html>
