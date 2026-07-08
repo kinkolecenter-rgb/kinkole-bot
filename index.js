@@ -275,8 +275,7 @@ async function traiterMessage(jid, texte) {
 // ============ CONNEXION WHATSAPP ============
 async function connecterWhatsApp() {
   const { version } = await fetchLatestBaileysVersion();
-  const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info');
-
+  const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info_v2');
   sock = makeWASocket({
     version,
     auth: authState,
