@@ -3,6 +3,7 @@ const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const QRCode = require('qrcode');
 
 // ============ CONFIGURATION ============
 const CONFIG = {
@@ -289,7 +290,9 @@ async function connecterWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log('\n🔗 SCANNE CE QR CODE AVEC WHATSAPP (numéro 243822354197)\n');
+      console.log('🔗 SCANNE CE QR CODE AVEC WHATSAPP (numéro 243822354197)');
+      global.currentQR = qr;
+      global.botConnected = false;
     }
 
     if (connection === 'close') {
@@ -300,7 +303,8 @@ async function connecterWhatsApp() {
       }
     } else if (connection === 'open') {
       console.log('✅ WhatsApp connecté !');
-      // Message de confirmation
+      global.currentQR = null;
+      global.botConnected = true;
       await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
         '🤖 *Bot Kinkole démarré !*\n\nEnvoie *menu* pour commencer.');
     }
@@ -327,14 +331,32 @@ async function connecterWhatsApp() {
 }
 
 // ============ SERVEUR HTTP (keep-alive Railway) ============
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({
-    status: 'ok',
-    bot: 'Kinkole Bot',
-    connected: sock?.user ? true : false,
-    numero: sock?.user?.id || 'non connecté'
-  }));
+const server = http.createServer(async (req, res) => {
+  if (global.botConnected) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1>✅ Bot Kinkole connecté et actif !</h1>');
+    return;
+  }
+  if (global.currentQR) {
+    try {
+      const qrImage = await QRCode.toDataURL(global.currentQR);
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`
+        <html><body style="text-align:center;font-family:sans-serif;padding:20px">
+        <h2>🤖 Bot Kinkole - Scanner le QR Code</h2>
+        <p>Ouvre WhatsApp sur le numéro <b>243822354197</b> → Appareils connectés → Connecter</p>
+        <img src="${qrImage}" style="width:300px;height:300px"/>
+        <p><small>Rafraîchis la page si le QR expire</small></p>
+        </body></html>
+      `);
+    } catch(e) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('QR code en cours de génération... Rafraîchis dans 5 secondes.');
+    }
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot démarrage en cours... Rafraîchis dans 5 secondes.');
+  }
 });
 
 server.listen(CONFIG.PORT, () => {
