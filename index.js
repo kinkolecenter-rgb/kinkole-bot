@@ -98,6 +98,11 @@ async function startBot() {
             }
             
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+            if (texte === 'PING') {
+                console.log("🛠️ TEST DIRECT EN COURS...");
+                await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu vois ça, c'est que Baileys peut te répondre." }, { quoted: msg });
+                continue;
+            }
             console.log(`📝 Texte reçu : "${texte}"`);
             
             if (texte) {
