@@ -93,21 +93,19 @@ async function startBot() {
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             console.log(`📝 Texte reçu : "${texte}" | Depuis JID : ${msg.key.remoteJid}`);
             
-            if (texte === 'PING') {
+            if (texte === "PING") {
                 console.log("🛠️ TEST DIRECT");
             
                 console.log("RemoteJid :", msg.key.remoteJid);
-                console.log("Participant :", msg.key.participant);
+                console.log("Message key :", JSON.stringify(msg.key, null, 2));
+                console.log("PushName :", msg.pushName);
             
-                try {
-                    await sock.sendMessage(msg.key.remoteJid, {
-                        text: "PONG"
-                    });
+                const contact = await sock.onWhatsApp(config.monNumero);
+                console.log("onWhatsApp :", JSON.stringify(contact, null, 2));
             
-                    console.log("✅ PONG envoyé");
-                } catch (err) {
-                    console.error("❌ Erreur d'envoi :", err);
-                }
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: "PONG"
+                });
             
                 continue;
             }
