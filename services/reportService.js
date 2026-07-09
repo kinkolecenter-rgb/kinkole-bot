@@ -38,11 +38,11 @@ module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
     const envoyerMessage = async (dest, txt) => {
         try { 
             console.log(`\n📤 Envoi vers : ${dest}`);
-            // Si le bot te répond en privé, il cite ton message pour forcer la livraison
+            // Si c'est une réponse directe (au LID), on cite le message d'origine
             if (dest === jid && originalMsg) {
                 await sock.sendMessage(dest, { text: txt }, { quoted: originalMsg });
             } else {
-                // S'il envoie le rapport final dans un groupe, il l'envoie normalement
+                // Pour les envois dans les groupes Kinkole, on envoie normalement
                 await sock.sendMessage(dest, { text: txt });
             }
             console.log(`✅ Réponse envoyée et confirmée !`);
