@@ -67,6 +67,11 @@ async function startBot() {
             isConnected = true;
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
+            // Affiche tous les groupes
+            const groupes = await sock.groupFetchAllParticipating();
+            Object.values(groupes).forEach(g => {
+                console.log(`📌 ${g.subject} → ${g.id}`);
+            });
         }
     });
 
