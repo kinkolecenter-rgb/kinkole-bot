@@ -73,16 +73,36 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
+        
         for (const msg of messages) {
+            // On ignore les messages du bot lui-même ou des groupes
             if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
             
-            const expediteur = msg.key.remoteJid.replace('@s.whatsapp.net', '');
-            if (expediteur !== config.monNumero) continue; // Sécurité Kinkole
+            // Extraction robuste du numéro (ignore les extensions d'appareils comme :1 ou :2)
+            const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
             
+            // On affiche dans Railway qui essaie de parler au bot
+            console.log(`\n📩 NOUVEAU MESSAGE DÉTECTÉ`);
+            console.log(`👤 De : ${expediteur} | 🎯 Attendu : ${config.monNumero}`);
+            
+            // Vérification de sécurité
+            if (expediteur !== String(config.monNumero)) {
+                console.log(`🚫 Message ignoré (Numéro non autorisé)`);
+                continue; 
+            }
+            
+            // Extraction du texte
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-            if (texte) await traiterMessage(sock, msg.key.remoteJid, texte);
+            console.log(`📝 Texte reçu : "${texte}"`);
+            
+            // Si le texte n'est pas vide, on l'envoie au service de rapport
+            if (texte) {
+                await traiterMessage(sock, msg.key.remoteJid, texte);
+            } else {
+                console.log(`⚠️ Le message ne contient pas de texte lisible.`);
+            }
         }
     });
 }
