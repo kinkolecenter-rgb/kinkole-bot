@@ -27,8 +27,7 @@ redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await redisAuth(redis, 'kinkole-session');
-
+    const { state, saveCreds } = await redisAuth(redis, 'kinkole-session-v2');
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'info' }),
@@ -101,9 +100,10 @@ async function startBot() {
             if (texte === 'PING') {
                 console.log("🛠️ TEST DIRECT EN COURS...");
                 try {
-                    // On répond basiquement à l'identifiant exact qui a parlé
-                    await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu lis ça, le cryptage fonctionne." });
-                    console.log("✅ PONG ENVOYÉ À L'API !");
+                    // On force l'envoi sur ton VRAI numéro officiel, pas sur le LID
+                    const vraieCible = `${config.monNumero}@s.whatsapp.net`;
+                    await sock.sendMessage(vraieCible, { text: "PONG ! Si tu lis ça, le cryptage fonctionne à 100%." });
+                    console.log("✅ PONG ENVOYÉ !");
                 } catch (erreur) {
                     console.error("❌ CRASH LORS DE L'ENVOI :", erreur);
                 }
