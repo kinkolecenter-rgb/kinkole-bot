@@ -27,13 +27,22 @@ async function redisGet(key) {
 
 async function redisSet(key, value) {
   try {
-    await fetch(`${REDIS_URL}/set/${key}`, {
+    const res = await fetch(`${REDIS_URL}/set/${key}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ value })
     });
-  } catch(e) {
-    console.log('Redis SET error:', e.message);
+
+    const data = await res.json();
+
+    console.log("Redis SET Status:", res.status);
+    console.log("Redis SET Response:", data);
+
+  } catch (e) {
+    console.log("Redis SET error:", e.message);
   }
 }
 
@@ -354,6 +363,8 @@ async function connecterWhatsApp() {
   }
 
   const { version } = await fetchLatestBaileysVersion();
+    console.log("REDIS URL :", process.env.UPSTASH_REDIS_REST_URL);
+    console.log("REDIS TOKEN :", process.env.UPSTASH_REDIS_REST_TOKEN?.slice(0, 10) + "...");
   const { state: authState, saveCreds } = await useUpstashAuthState();
 
   sock = makeWASocket({
