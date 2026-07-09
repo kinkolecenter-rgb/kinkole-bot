@@ -5,6 +5,24 @@ const https = require('https');
 const http = require('http');
 const QRCode = require('qrcode');
 
+// ============ CHARGEMENT SESSION DEPUIS VARIABLES RAILWAY ============
+function chargerSession() {
+  try {
+    let base64 = '';
+    let i = 0;
+    while(process.env['WA_SESSION_' + i]) {
+      base64 += process.env['WA_SESSION_' + i];
+      i++;
+    }
+    if (!base64) { console.log('⚠️ Pas de session - QR code requis'); return; }
+    const session = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+    if (!fs.existsSync('./auth_info')) fs.mkdirSync('./auth_info');
+    Object.keys(session).forEach(f => { fs.writeFileSync(`./auth_info/${f}`, session[f]); });
+    console.log('✅ Session chargée depuis Railway');
+  } catch(e) { console.log('⚠️ Erreur session:', e.message); }
+}
+chargerSession();
+
 // ============ CONFIGURATION ============
 const CONFIG = {
   MON_NUMERO: process.env.MON_NUMERO || '243904246049',
