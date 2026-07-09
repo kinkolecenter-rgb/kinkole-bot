@@ -27,21 +27,28 @@ const QUESTIONS = {
 
 const getMenu = () => '📋 *BOT RAPPORT KINKOLE*\n\n1️⃣ Gestion Center - Matin\n2️⃣ Gestion Center - Soir\n3️⃣ S.Check - Matin\n4️⃣ S.Check - Soir\n5️⃣ Rates & Fixtures\n──────────────\nEnvoie le numéro de ton choix.';
 
-module.exports = async function traiterMessage(sock, jid, texte) {
+// ============ LOGIQUE PRINCIPALE ============
+// On ajoute "originalMsg" dans les paramètres
+module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
     const state = getState(jid);
-    const msg = texte.trim().toUpperCase();
+    const msgText = texte.trim().toUpperCase();
     const now = new Date();
-    const date = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+    const date = String(now.getDate()).padStart(2,'0') + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + now.getFullYear();
 
-    // Nouvelle fonction avec des logs détaillés
     const envoyerMessage = async (dest, txt) => {
         try { 
-            console.log(`\n📤 Tentative d'envoi de réponse vers : ${dest}`);
-            await sock.sendMessage(dest, { text: txt }); 
-            console.log(`✅ Réponse envoyée avec succès à l'appareil WhatsApp !`);
+            console.log(`\n📤 Envoi vers : ${dest}`);
+            // Si le bot te répond en privé, il cite ton message pour forcer la livraison
+            if (dest === jid && originalMsg) {
+                await sock.sendMessage(dest, { text: txt }, { quoted: originalMsg });
+            } else {
+                // S'il envoie le rapport final dans un groupe, il l'envoie normalement
+                await sock.sendMessage(dest, { text: txt });
+            }
+            console.log(`✅ Réponse envoyée et confirmée !`);
         } 
         catch(e) { 
-            console.error(`❌ Échec de l'envoi de la réponse:`, e); 
+            console.error(`❌ Échec de l'envoi:`, e); 
         }
     };
 
