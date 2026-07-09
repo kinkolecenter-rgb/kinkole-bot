@@ -107,7 +107,9 @@ sock.ev.on('messages.upsert', async ({ messages, type }) => {
             console.log(`📝 Texte reçu : "${texte}"`);
             
             if (texte) {
-                await traiterMessage(sock, msg.key.remoteJid, texte);
+                // On ignore le @lid et on force l'envoi vers ton vrai numéro WhatsApp
+                const vraiDestinataire = `${config.monNumero}@s.whatsapp.net`;
+                await traiterMessage(sock, vraiDestinataire, texte);
             } else {
                 console.log(`⚠️ Le message ne contient pas de texte lisible.`);
             }
