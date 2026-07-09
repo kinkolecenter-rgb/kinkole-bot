@@ -84,47 +84,33 @@ async function startBot() {
         for (const msg of messages) {
             if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
             
-            // Extraction de l'expéditeur
             const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
             
-            console.log(`\n📩 NOUVEAU MESSAGE DÉTECTÉ`);
-            console.log(`👤 De : ${expediteur} | 🎯 Attendu : ${config.monNumero} ou ${config.monLid}`);
-            
-            // TON FILTRE PROPRE : On accepte le numéro classique OU le LID
             if (expediteur !== String(config.monNumero) && expediteur !== String(config.monLid)) {
-                console.log(`🚫 Message ignoré (Numéro non autorisé)`);
                 continue; 
             }
             
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+            console.log(`📝 Texte reçu : "${texte}" | Depuis JID : ${msg.key.remoteJid}`);
+            
             if (texte === 'PING') {
                 console.log("🛠️ TEST DIRECT EN COURS...");
                 try {
-                    // On force l'envoi sur ton VRAI numéro officiel, pas sur le LID
-                    const vraieCible = `${config.monNumero}@s.whatsapp.net`;
-                    await sock.sendMessage(vraieCible, { text: "PONG ! Si tu lis ça, le cryptage fonctionne à 100%." });
+                    // LA SOLUTION : On répond au LID, mais on CITE le message entrant
+                    await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu vois ça, la méthode de citation fonctionne." }, { quoted: msg });
                     console.log("✅ PONG ENVOYÉ !");
                 } catch (erreur) {
-                    console.error("❌ CRASH LORS DE L'ENVOI :", erreur);
+                    console.error("❌ ERREUR LORS DE L'ENVOI :", erreur);
                 }
                 continue;
             }
-            console.log(`📝 Texte reçu : "${texte}"`);
             
             if (texte) {
-                // 1. On marque comme lu
                 await sock.readMessages([msg.key]);
+                await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
                 
-                // 2. FORCER LE VRAI DESTINATAIRE : On ignore le @lid pour la réponse
-                const vraiDestinataire = `${config.monNumero}@s.whatsapp.net`;
-                
-                // 3. Simuler la frappe et envoyer sur le vrai numéro
-                await sock.sendPresenceUpdate('composing', vraiDestinataire);
-                
-                // 4. On passe "vraiDestinataire" au lieu de "msg.key.remoteJid"
-                await traiterMessage(sock, vraiDestinataire, texte, msg);
-            } else {
-                console.log(`⚠️ Le message ne contient pas de texte lisible.`);
+                // On passe le remoteJid intact (le LID) et le message entier (msg)
+                await traiterMessage(sock, msg.key.remoteJid, texte, msg);
             }
         }
     });
