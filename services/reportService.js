@@ -52,19 +52,22 @@ module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
         }
     };
 
-    if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'AIDE'].includes(msg)) {
+// --- CORRECTION : Utilisation de msgText au lieu de msg ---
+    if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'AIDE'].includes(msgText)) {
         resetState(jid);
         await envoyerMessage(jid, getMenu());
         return;
     }
-    if (['ANNULER', 'CANCEL', 'STOP'].includes(msg)) {
+    
+    if (['ANNULER', 'CANCEL', 'STOP'].includes(msgText)) {
         resetState(jid);
         await envoyerMessage(jid, '❌ Annulé. Envoie *menu* pour recommencer.');
         return;
     }
 
+    // Gestion de la confirmation finale
     if (state.etape === 'confirmation') {
-        if (msg === 'OUI') {
+        if (msgText === 'OUI') {
             const groupe = GROUPES[state.groupe];
             await envoyerMessage(groupe.numero, state.rapport_final);
             await envoyerMessage(`${config.monNumero}@s.whatsapp.net`, `✅ Rapport envoyé dans *${groupe.nom}*`);
@@ -76,6 +79,7 @@ module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
         return;
     }
 
+    // Initialisation d'un nouveau rapport
     if (state.etape === undefined) {
         const choix = {
             '1': { key: 'gestion_center_matin', groupe: 'gestion_center' },
@@ -84,7 +88,7 @@ module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
             '4': { key: 's_check_soir',         groupe: 's_check' },
             '5': { key: 'rate_fixture_matin',   groupe: 'rate_fixture' }
         };
-        const selection = choix[msg];
+        const selection = choix[msgText];
         if (!selection) { await envoyerMessage(jid, getMenu()); return; }
         
         const questions = QUESTIONS[selection.key];
