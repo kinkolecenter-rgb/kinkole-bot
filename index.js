@@ -27,7 +27,7 @@ redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await redisAuth(redis, 'kinkole-session-v2');
+    const { state, saveCreds } = await redisAuth(redis, 'kinkole-session-v3');
     const sock = makeWASocket({
         version,
         logger: pino({ level: 'info' }),
