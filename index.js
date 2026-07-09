@@ -1,26 +1,105 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
 const fs = require('fs');
 const http = require('http');
 const QRCode = require('qrcode');
 
-// ============ CHARGEMENT SESSION DEPUIS VARIABLES RAILWAY ============
-function chargerSession() {
+// ============ UPSTASH REDIS ============
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+async function redisGet(key) {
   try {
-    let base64 = '';
-    let i = 0;
-    while(process.env['WA_SESSION_' + i]) {
-      base64 += process.env['WA_SESSION_' + i];
-      i++;
-    }
-    if (!base64) { console.log('⚠️ Pas de session - QR code requis'); return; }
-    const session = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-    if (!fs.existsSync('./auth_info')) fs.mkdirSync('./auth_info');
-    Object.keys(session).forEach(f => { fs.writeFileSync('./auth_info/' + f, session[f]); });
-    console.log('✅ Session chargée depuis Railway (' + Object.keys(session).length + ' fichiers)');
-  } catch(e) { console.log('⚠️ Erreur session:', e.message); }
+    const res = await fetch(`${REDIS_URL}/get/${key}`, {
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    });
+    const data = await res.json();
+    return data.result;
+  } catch(e) {
+    console.log('Redis GET error:', e.message);
+    return null;
+  }
 }
-chargerSession();
+
+async function redisSet(key, value) {
+  try {
+    await fetch(`${REDIS_URL}/set/${key}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value })
+    });
+  } catch(e) {
+    console.log('Redis SET error:', e.message);
+  }
+}
+
+async function redisDel(key) {
+  try {
+    await fetch(`${REDIS_URL}/del/${key}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    });
+  } catch(e) {}
+}
+
+// ============ AUTH STATE UPSTASH ============
+async function useUpstashAuthState() {
+  const KEY = 'wa_session';
+
+  async function readData() {
+    const raw = await redisGet(KEY);
+    if (!raw) return {};
+    try { return JSON.parse(raw); } catch(e) { return {}; }
+  }
+
+  async function writeData(data) {
+    await redisSet(KEY, JSON.stringify(data));
+  }
+
+  let store = await readData();
+  console.log('📦 Session Redis:', Object.keys(store).length, 'clés trouvées');
+
+  const { BufferJSON, initAuthCreds } = require('@whiskeysockets/baileys');
+
+  const creds = store['creds']
+    ? JSON.parse(JSON.stringify(store['creds']), BufferJSON.reviver)
+    : initAuthCreds();
+
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          for (const id of ids) {
+            const val = store[`${type}-${id}`];
+            if (val) {
+              data[id] = JSON.parse(JSON.stringify(val), BufferJSON.reviver);
+            }
+          }
+          return data;
+        },
+        set: async (data) => {
+          for (const category of Object.keys(data)) {
+            for (const id of Object.keys(data[category])) {
+              const val = data[category][id];
+              if (val) {
+                store[`${category}-${id}`] = JSON.parse(JSON.stringify(val), BufferJSON.replacer);
+              } else {
+                delete store[`${category}-${id}`];
+              }
+            }
+          }
+          await writeData(store);
+        }
+      }
+    },
+    saveCreds: async () => {
+      store['creds'] = JSON.parse(JSON.stringify(creds), BufferJSON.replacer);
+      await writeData(store);
+      console.log('💾 Session sauvegardée dans Redis');
+    }
+  };
+}
 
 // ============ CONFIGURATION ============
 const CONFIG = {
@@ -264,15 +343,13 @@ async function traiterMessage(jid, texte) {
 
 // ============ CONNEXION WHATSAPP ============
 async function connecterWhatsApp() {
-  // Protection anti-ban : max 5 reconnexions
   if (reconnectCount >= MAX_RECONNECT) {
-    console.log('🛑 Trop de reconnexions (' + reconnectCount + '). Bot arrêté pour protéger le numéro.');
-    console.log('🛑 Redémarre le service manuellement depuis Railway.');
+    console.log('🛑 Trop de reconnexions. Bot arrêté pour protéger le numéro.');
     return;
   }
 
   const { version } = await fetchLatestBaileysVersion();
-  const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info');
+  const { state: authState, saveCreds } = await useUpstashAuthState();
 
   sock = makeWASocket({
     version,
@@ -280,35 +357,45 @@ async function connecterWhatsApp() {
     printQRInTerminal: false,
     browser: ['Kinkole Bot', 'Chrome', '1.0.0'],
     connectTimeoutMs: 60000,
-    defaultQueryTimeoutMs: 60000,
     keepAliveIntervalMs: 30000,
   });
 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      console.log('🔗 QR code généré - scanne depuis le navigateur');
+      global.currentQR = qr;
+      global.botConnected = false;
+    }
 
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
-      console.log('❌ Connexion fermée. Code:', statusCode, '| Déconnecté:', loggedOut);
+      console.log('❌ Connexion fermée. Code:', statusCode);
 
       if (loggedOut) {
-        console.log('🔴 Session expirée - ne pas reconnecter automatiquement');
+        console.log('🔴 Session expirée - suppression Redis');
+        await redisDel('wa_session');
         global.botConnected = false;
+        global.currentQR = null;
+        reconnectCount = 0;
+        setTimeout(connecterWhatsApp, 5000);
         return;
       }
 
       reconnectCount++;
-      const delai = Math.min(30000 * reconnectCount, 300000); // 30s, 60s, 90s... max 5min
-      console.log('🔄 Reconnexion ' + reconnectCount + '/' + MAX_RECONNECT + ' dans ' + (delai/1000) + 'secondes...');
+      const delai = Math.min(30000 * reconnectCount, 300000);
+      console.log('🔄 Reconnexion ' + reconnectCount + '/' + MAX_RECONNECT + ' dans ' + (delai/1000) + 's');
       setTimeout(connecterWhatsApp, delai);
 
     } else if (connection === 'open') {
-      reconnectCount = 0; // reset compteur après succès
+      reconnectCount = 0;
       console.log('✅ WhatsApp connecté !');
       global.botConnected = true;
+      global.currentQR = null;
       await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
         '🤖 *Bot Kinkole actif !*\n\nEnvoie *menu* pour commencer.');
     }
@@ -334,16 +421,32 @@ const server = http.createServer(async (req, res) => {
   if (global.botConnected) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px;color:green">✅ Bot Kinkole connecté et actif !</h1>');
-  } else {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px;color:orange">⏳ Bot en cours de connexion...</h1>');
+    return;
   }
+  if (global.currentQR) {
+    try {
+      const qrImage = await QRCode.toDataURL(global.currentQR);
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<!DOCTYPE html><html><body style="text-align:center;font-family:sans-serif;padding:20px">
+        <h2>🤖 Bot Kinkole - Scanner le QR Code</h2>
+        <p>Ouvre WhatsApp sur <b>243897077439</b> → Appareils connectés → Connecter</p>
+        <img src="${qrImage}" style="width:300px;height:300px"/>
+        <p><small>La page se rafraîchit automatiquement...</small></p>
+        <script>setTimeout(()=>location.reload(), 20000)</script>
+      </body></html>`);
+    } catch(e) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('QR en cours... Rafraîchis dans 5s');
+    }
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot démarrage en cours... Rafraîchis dans 5s');
 });
 
 server.listen(CONFIG.PORT, () => {
   console.log('🌐 Serveur HTTP sur port ' + CONFIG.PORT);
 });
 
-// ============ DÉMARRAGE ============
 console.log('🚀 Démarrage Bot Kinkole...');
 connecterWhatsApp();
