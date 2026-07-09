@@ -37,14 +37,17 @@ module.exports = async function traiterMessage(sock, jid, texte, originalMsg) {
 
     const envoyerMessage = async (dest, txt) => {
         try { 
-            console.log(`\n📤 Envoi vers : ${dest}`);
-            // Si c'est une réponse directe (au LID), on cite le message d'origine
-            if (dest === jid && originalMsg) {
-                await sock.sendMessage(dest, { text: txt }, { quoted: originalMsg });
-            } else {
-                // Pour les envois dans les groupes Kinkole, on envoie normalement
-                await sock.sendMessage(dest, { text: txt });
+            // Si la destination contient @lid, on force vers le vrai numéro
+            let cibleFinale = dest;
+            if (dest.includes('@lid')) {
+                cibleFinale = `${config.monNumero}@s.whatsapp.net`;
             }
+            
+            console.log(`\n📤 Envoi propre vers : ${cibleFinale}`);
+            
+            // ENVOI SIMPLE, AUCUNE CITATION
+            await sock.sendMessage(cibleFinale, { text: txt });
+            
             console.log(`✅ Réponse envoyée et confirmée !`);
         } 
         catch(e) { 
