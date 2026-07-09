@@ -33,8 +33,16 @@ module.exports = async function traiterMessage(sock, jid, texte) {
     const now = new Date();
     const date = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
 
+    // Nouvelle fonction avec des logs détaillés
     const envoyerMessage = async (dest, txt) => {
-        try { await sock.sendMessage(dest, { text: txt }); } catch(e) { console.error('❌ Erreur envoi:', e.message); }
+        try { 
+            console.log(`\n📤 Tentative d'envoi de réponse vers : ${dest}`);
+            await sock.sendMessage(dest, { text: txt }); 
+            console.log(`✅ Réponse envoyée avec succès à l'appareil WhatsApp !`);
+        } 
+        catch(e) { 
+            console.error(`❌ Échec de l'envoi de la réponse:`, e); 
+        }
     };
 
     if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'AIDE'].includes(msg)) {
