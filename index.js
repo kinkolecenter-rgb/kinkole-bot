@@ -86,24 +86,26 @@ sock.ev.on('messages.upsert', async ({ messages, type }) => {
             // On ignore les messages du bot lui-même ou des groupes
             if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
             
-            // Extraction robuste du numéro (ignore les extensions d'appareils comme :1 ou :2)
+            // Extraction robuste du numéro
             const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
             
-            // On affiche dans Railway qui essaie de parler au bot
             console.log(`\n📩 NOUVEAU MESSAGE DÉTECTÉ`);
             console.log(`👤 De : ${expediteur} | 🎯 Attendu : ${config.monNumero}`);
             
-            // Vérification de sécurité
-            if (expediteur !== String(config.monNumero)) {
+            // --- MODIFICATION ICI ---
+            // On autorise ton vrai numéro ET ton identifiant interne WhatsApp (LID)
+            const numerosAutorises = [String(config.monNumero), '204685424214253'];
+            
+            if (!numerosAutorises.includes(expediteur)) {
                 console.log(`🚫 Message ignoré (Numéro non autorisé)`);
                 continue; 
             }
+            // ------------------------
             
             // Extraction du texte
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             console.log(`📝 Texte reçu : "${texte}"`);
             
-            // Si le texte n'est pas vide, on l'envoie au service de rapport
             if (texte) {
                 await traiterMessage(sock, msg.key.remoteJid, texte);
             } else {
