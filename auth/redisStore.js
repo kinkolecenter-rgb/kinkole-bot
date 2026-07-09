@@ -1,31 +1,29 @@
 const { initAuthCreds, BufferJSON, proto } = require('@whiskeysockets/baileys');
 
 module.exports = async (redisClient, sessionId = 'session') => {
-    
-    const writeData = async (data, key) => {
+
+    const write = async (data, key) => {
         try {
             await redisClient.set(`${sessionId}:${key}`, JSON.stringify(data, BufferJSON.replacer));
-        } catch (error) {
-            console.error(`❌ Erreur d'écriture Redis pour la clé ${key}:`, error);
+        } catch (e) {
+            console.error(`❌ Redis write error [${key}]:`, e);
         }
     };
 
-    const readData = async (key) => {
+    const read = async (key) => {
         try {
             const data = await redisClient.get(`${sessionId}:${key}`);
             return data ? JSON.parse(data, BufferJSON.reviver) : null;
-        } catch (error) {
+        } catch (e) {
             return null;
         }
     };
 
-    const removeData = async (key) => {
-        try {
-            await redisClient.del(`${sessionId}:${key}`);
-        } catch (error) {}
+    const remove = async (key) => {
+        try { await redisClient.del(`${sessionId}:${key}`); } catch (e) {}
     };
 
-    const creds = await readData('creds') || initAuthCreds();
+    const creds = (await read('creds')) || initAuthCreds();
 
     return {
         state: {
@@ -34,7 +32,7 @@ module.exports = async (redisClient, sessionId = 'session') => {
                 get: async (type, ids) => {
                     const data = {};
                     for (const id of ids) {
-                        let value = await readData(`${type}-${id}`);
+                        let value = await read(`${type}-${id}`);
                         if (type === 'app-state-sync-key' && value) {
                             value = proto.Message.AppStateSyncKeyData.fromObject(value);
                         }
@@ -43,23 +41,17 @@ module.exports = async (redisClient, sessionId = 'session') => {
                     return data;
                 },
                 set: async (data) => {
-                    // C'est ici qu'est la magie : on sauvegarde séquentiellement 
-                    // pour ne pas saturer Upstash Redis et corrompre la session.
                     for (const category in data) {
                         for (const id in data[category]) {
                             const value = data[category][id];
-                            const key = `${category}-${id}`;
-                            
-                            if (value) {
-                                await writeData(value, key);
-                            } else {
-                                await removeData(key);
-                            }
+                            value
+                                ? await write(value, `${category}-${id}`)
+                                : await remove(`${category}-${id}`);
                         }
                     }
                 }
             }
         },
-        saveCreds: () => writeData(creds, 'creds')
+        saveCreds: () => write(creds, 'creds')
     };
 };
