@@ -31,7 +31,7 @@ async function startBot() {
 
     const sock = makeWASocket({
         version,
-        logger: pino({ level: 'silent' }),
+        logger: pino({ level: 'info' }),
         printQRInTerminal: false,
         auth: state,
         browser: ['Kinkole Bot', 'Chrome', '2.0.0']
@@ -100,7 +100,13 @@ async function startBot() {
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             if (texte === 'PING') {
                 console.log("🛠️ TEST DIRECT EN COURS...");
-                await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu vois ça, c'est que Baileys peut te répondre." }, { quoted: msg });
+                try {
+                    // On répond basiquement à l'identifiant exact qui a parlé
+                    await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu lis ça, le cryptage fonctionne." });
+                    console.log("✅ PONG ENVOYÉ À L'API !");
+                } catch (erreur) {
+                    console.error("❌ CRASH LORS DE L'ENVOI :", erreur);
+                }
                 continue;
             }
             console.log(`📝 Texte reçu : "${texte}"`);
