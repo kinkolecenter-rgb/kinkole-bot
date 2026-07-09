@@ -1,0 +1,20 @@
+{
+  "name": "kinkole-bot",
+  "version": "2.0.0",
+  "description": "Bot WhatsApp Rapport Kinkole structuré",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "6.7.9",
+    "ioredis": "^5.4.1",
+    "pino": "^9.3.2",
+    "qrcode": "^1.5.3",
+    "express": "^4.19.2"
+  }
+}
