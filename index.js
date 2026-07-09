@@ -107,8 +107,12 @@ async function startBot() {
                 const contact = await sock.onWhatsApp(config.monNumero);
                 console.log("onWhatsApp :", JSON.stringify(contact, null, 2));
             
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: "PONG"
+                const contact = await sock.onWhatsApp(config.monNumero);
+
+                console.log("JID utilisé :", contact[0].jid);
+                
+                await sock.sendMessage(contact[0].jid, {
+                    text: "PONG via onWhatsApp"
                 });
             
                 continue;
