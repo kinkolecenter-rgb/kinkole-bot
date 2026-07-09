@@ -98,25 +98,26 @@ async function startBot() {
             console.log(`📝 Texte reçu : "${texte}" | Depuis JID : ${msg.key.remoteJid}`);
             
             if (texte === "PING") {
-                console.log("🛠️ TEST DIRECT");
-            
-                console.log("RemoteJid :", msg.key.remoteJid);
-                console.log("Message key :", JSON.stringify(msg.key, null, 2));
-                console.log("PushName :", msg.pushName);
-            
-                const contact = await sock.onWhatsApp(config.monNumero);
-                console.log("onWhatsApp :", JSON.stringify(contact, null, 2));
-            
-                const contact = await sock.onWhatsApp(config.monNumero);
-
-                console.log("JID utilisé :", contact[0].jid);
-                
-                await sock.sendMessage(contact[0].jid, {
-                    text: "PONG via onWhatsApp"
-                });
-            
-                continue;
-            }
+              console.log("🛠️ TEST DIRECT");
+          
+              console.log("RemoteJid :", msg.key.remoteJid);
+              console.log("Message key :", JSON.stringify(msg.key, null, 2));
+              console.log("PushName :", msg.pushName);
+          
+              const contact = await sock.onWhatsApp(config.monNumero);
+          
+              console.log("onWhatsApp :", JSON.stringify(contact, null, 2));
+          
+              if (contact.length > 0) {
+                  console.log("JID utilisé :", contact[0].jid);
+          
+                  await sock.sendMessage(contact[0].jid, {
+                      text: "PONG via onWhatsApp"
+                  });
+              }
+          
+              continue;
+          }
             
             if (texte) {
                 await sock.readMessages([msg.key]);
