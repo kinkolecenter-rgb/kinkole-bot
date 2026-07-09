@@ -94,15 +94,21 @@ async function startBot() {
             console.log(`📝 Texte reçu : "${texte}" | Depuis JID : ${msg.key.remoteJid}`);
             
             if (texte === 'PING') {
-                console.log("🛠️ TEST DIRECT EN COURS...");
+                console.log("🛠️ TEST DIRECT");
+            
+                console.log("RemoteJid :", msg.key.remoteJid);
+                console.log("Participant :", msg.key.participant);
+            
                 try {
-                    // On envoie au vrai numéro, SANS CITATION pour ne pas déclencher le bug de sécurité
-                    const vraiNumero = `${config.monNumero}@s.whatsapp.net`;
-                    await sock.sendMessage(vraiNumero, { text: "PONG ! Si tu vois ça, c'est que l'envoi propre fonctionne." });
-                    console.log("✅ PONG ENVOYÉ SANS ERREUR ACK !");
-                } catch (erreur) {
-                    console.error("❌ ERREUR LORS DE L'ENVOI :", erreur);
+                    await sock.sendMessage(msg.key.remoteJid, {
+                        text: "PONG"
+                    });
+            
+                    console.log("✅ PONG envoyé");
+                } catch (err) {
+                    console.error("❌ Erreur d'envoi :", err);
                 }
+            
                 continue;
             }
             
