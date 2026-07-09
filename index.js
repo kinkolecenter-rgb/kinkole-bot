@@ -1,4 +1,9 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const {
+    default: makeWASocket,
+    DisconnectReason,
+    fetchLatestBaileysVersion,
+    Browsers
+} = require("@whiskeysockets/baileys");
 const fs = require('fs');
 const http = require('http');
 const QRCode = require('qrcode');
@@ -355,10 +360,16 @@ async function connecterWhatsApp() {
     version,
     auth: authState,
     printQRInTerminal: false,
-    browser: ['Kinkole Bot', 'Chrome', '1.0.0'],
+
+    browser: Browsers.ubuntu("Chrome"),
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
+    generateHighQualityLinkPreview: false,
+    fireInitQueries: true,
+
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 30000,
-  });
+});
 
   sock.ev.on('creds.update', saveCreds);
 
@@ -366,6 +377,7 @@ async function connecterWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      await redisDel("wa_session");
       console.log('🔗 QR code généré - scanne depuis le navigateur');
       global.currentQR = qr;
       global.botConnected = false;
