@@ -1,7 +1,6 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs');
-const https = require('https');
 const http = require('http');
 const QRCode = require('qrcode');
 
@@ -17,8 +16,8 @@ function chargerSession() {
     if (!base64) { console.log('⚠️ Pas de session - QR code requis'); return; }
     const session = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
     if (!fs.existsSync('./auth_info')) fs.mkdirSync('./auth_info');
-    Object.keys(session).forEach(f => { fs.writeFileSync(`./auth_info/${f}`, session[f]); });
-    console.log('✅ Session chargée depuis Railway');
+    Object.keys(session).forEach(f => { fs.writeFileSync('./auth_info/' + f, session[f]); });
+    console.log('✅ Session chargée depuis Railway (' + Object.keys(session).length + ' fichiers)');
   } catch(e) { console.log('⚠️ Erreur session:', e.message); }
 }
 chargerSession();
@@ -26,23 +25,18 @@ chargerSession();
 // ============ CONFIGURATION ============
 const CONFIG = {
   MON_NUMERO: process.env.MON_NUMERO || '243904246049',
-  APPS_SCRIPT_URL: process.env.APPS_SCRIPT_URL || '',
   PORT: process.env.PORT || 3000,
 };
 
 // ============ ÉTAT BOT ============
 let botState = {};
 let sock = null;
+let reconnectCount = 0;
+const MAX_RECONNECT = 5;
 
-function getState() {
-  return botState;
-}
-function setState(s) {
-  botState = s;
-}
-function resetState() {
-  botState = {};
-}
+function getState() { return botState; }
+function setState(s) { botState = s; }
+function resetState() { botState = {}; }
 
 // ============ MODÈLES ============
 function getModeleMatin(d) {
@@ -92,7 +86,7 @@ function getModeleSoir(d) {
 }
 
 function getModeleSCheck(d) {
-  return `Coffre ok hormis\n* collect ${d.collect}`;
+  return 'Coffre ok hormis\n* collect ' + d.collect;
 }
 
 function getModeleRateFixture(d) {
@@ -111,18 +105,9 @@ Vente: ${d.vente}`;
 
 // ============ GROUPES ============
 const GROUPES = {
-  gestion_center: {
-    nom: 'Gestion Centers📢',
-    numero: '120363027433348642@g.us',
-  },
-  s_check: {
-    nom: 'S.check bn',
-    numero: '243900435187-1560795042@g.us',
-  },
-  rate_fixture: {
-    nom: 'Rates&Fixtures',
-    numero: '243890177777-1574181414@g.us',
-  },
+  gestion_center: { nom: 'Gestion Centers📢', numero: '120363027433348642@g.us' },
+  s_check:        { nom: 'S.check bn',        numero: '243900435187-1560795042@g.us' },
+  rate_fixture:   { nom: 'Rates&Fixtures',    numero: '243890177777-1574181414@g.us' },
 };
 
 // ============ QUESTIONS ============
@@ -182,9 +167,9 @@ const QUESTIONS = {
 async function envoyerMessage(jid, texte) {
   try {
     await sock.sendMessage(jid, { text: texte });
-    console.log(`✅ Message envoyé à ${jid}`);
+    console.log('✅ Message envoyé à ' + jid);
   } catch(e) {
-    console.error(`❌ Erreur envoi à ${jid}:`, e.message);
+    console.error('❌ Erreur envoi:', e.message);
   }
 }
 
@@ -192,19 +177,19 @@ async function envoyerRapport(groupe_key, texte) {
   const groupe = GROUPES[groupe_key];
   await envoyerMessage(groupe.numero, texte);
   await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
-    `✅ Rapport envoyé dans *${groupe.nom}*`);
+    '✅ Rapport envoyé dans *' + groupe.nom + '*');
 }
 
 // ============ MENU ============
 function getMenu() {
-  return `📋 *BOT RAPPORT KINKOLE*\n\n` +
-    `1️⃣  Gestion Center - Matin\n` +
-    `2️⃣  Gestion Center - Soir\n` +
-    `3️⃣  S.Check - Matin\n` +
-    `4️⃣  S.Check - Soir\n` +
-    `5️⃣  Rates & Fixtures\n` +
-    `──────────────\n` +
-    `Envoie le numéro de ton choix.`;
+  return '📋 *BOT RAPPORT KINKOLE*\n\n' +
+    '1️⃣  Gestion Center - Matin\n' +
+    '2️⃣  Gestion Center - Soir\n' +
+    '3️⃣  S.Check - Matin\n' +
+    '4️⃣  S.Check - Soir\n' +
+    '5️⃣  Rates & Fixtures\n' +
+    '──────────────\n' +
+    'Envoie le numéro de ton choix.';
 }
 
 // ============ TRAITEMENT MESSAGE ============
@@ -212,9 +197,8 @@ async function traiterMessage(jid, texte) {
   const state = getState();
   const msg = texte.trim().toUpperCase();
   const now = new Date();
-  const date = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+  const date = String(now.getDate()).padStart(2,'0') + '/' + String(now.getMonth()+1).padStart(2,'0') + '/' + now.getFullYear();
 
-  // Commandes globales
   if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'AIDE'].includes(msg)) {
     resetState();
     await envoyerMessage(jid, getMenu());
@@ -226,7 +210,6 @@ async function traiterMessage(jid, texte) {
     return;
   }
 
-  // Confirmation
   if (state.etape === 'confirmation') {
     if (msg === 'OUI') {
       await envoyerRapport(state.groupe, state.rapport_final);
@@ -238,7 +221,6 @@ async function traiterMessage(jid, texte) {
     return;
   }
 
-  // Sélection rapport
   if (!state.etape && state.etape !== 0) {
     const choix = {
       '1': { key: 'gestion_center_matin', groupe: 'gestion_center' },
@@ -247,33 +229,25 @@ async function traiterMessage(jid, texte) {
       '4': { key: 's_check_soir',         groupe: 's_check' },
       '5': { key: 'rate_fixture_matin',   groupe: 'rate_fixture' },
     };
-
     const selection = choix[msg];
-    if (!selection) {
-      await envoyerMessage(jid, getMenu());
-      return;
-    }
-
+    if (!selection) { await envoyerMessage(jid, getMenu()); return; }
     const questions = QUESTIONS[selection.key];
     setState({ etape: 0, rapport_key: selection.key, groupe: selection.groupe, data: { date } });
     await envoyerMessage(jid,
-      `✅ *${selection.key.replace(/_/g,' ').toUpperCase()}*\n` +
-      `${questions.length} questions. Réponds *annuler* à tout moment.\n\n` +
-      `❓ (1/${questions.length}) ${questions[0].q}`
+      '✅ *' + selection.key.replace(/_/g,' ').toUpperCase() + '*\n' +
+      questions.length + ' questions. Réponds *annuler* à tout moment.\n\n' +
+      '❓ (1/' + questions.length + ') ' + questions[0].q
     );
     return;
   }
 
-  // Q&R en cours
   const questions = QUESTIONS[state.rapport_key];
   state.data[questions[state.etape].key] = texte;
   state.etape++;
 
   if (state.etape < questions.length) {
     setState(state);
-    await envoyerMessage(jid,
-      `❓ (${state.etape + 1}/${questions.length}) ${questions[state.etape].q}`
-    );
+    await envoyerMessage(jid, '❓ (' + (state.etape+1) + '/' + questions.length + ') ' + questions[state.etape].q);
   } else {
     let rapport = '';
     if (state.rapport_key === 'gestion_center_matin') rapport = getModeleMatin(state.data);
@@ -283,15 +257,20 @@ async function traiterMessage(jid, texte) {
 
     setState({ ...state, etape: 'confirmation', rapport_final: rapport });
     await envoyerMessage(jid,
-      `✅ *VÉRIFICATION AVANT ENVOI*\n\n${rapport}\n\n` +
-      `──────────────\n` +
-      `Envoie *OUI* pour confirmer ou *NON* pour annuler.`
+      '✅ *VÉRIFICATION AVANT ENVOI*\n\n' + rapport + '\n\n──────────────\nEnvoie *OUI* pour confirmer ou *NON* pour annuler.'
     );
   }
 }
 
 // ============ CONNEXION WHATSAPP ============
 async function connecterWhatsApp() {
+  // Protection anti-ban : max 5 reconnexions
+  if (reconnectCount >= MAX_RECONNECT) {
+    console.log('🛑 Trop de reconnexions (' + reconnectCount + '). Bot arrêté pour protéger le numéro.');
+    console.log('🛑 Redémarre le service manuellement depuis Railway.');
+    return;
+  }
+
   const { version } = await fetchLatestBaileysVersion();
   const { state: authState, saveCreds } = await useMultiFileAuthState('./auth_info');
 
@@ -300,104 +279,69 @@ async function connecterWhatsApp() {
     auth: authState,
     printQRInTerminal: false,
     browser: ['Kinkole Bot', 'Chrome', '1.0.0'],
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 30000,
   });
 
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      global.currentQR = qr;
-      global.botConnected = false;
-      try {
-        const code = await sock.requestPairingCode(process.env.WA_NUMBER || '243834543570');
-        console.log('🔑 PAIRING CODE:', code);
-        global.pairingCode = code;
-      } catch(e) {
-        console.log('Pairing code error:', e.message);
-      }
-    }
+    const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log('❌ Connexion fermée. Reconnexion:', shouldReconnect);
-      if (shouldReconnect) {
-        setTimeout(connecterWhatsApp, 5000);
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const loggedOut = statusCode === DisconnectReason.loggedOut;
+      console.log('❌ Connexion fermée. Code:', statusCode, '| Déconnecté:', loggedOut);
+
+      if (loggedOut) {
+        console.log('🔴 Session expirée - ne pas reconnecter automatiquement');
+        global.botConnected = false;
+        return;
       }
+
+      reconnectCount++;
+      const delai = Math.min(30000 * reconnectCount, 300000); // 30s, 60s, 90s... max 5min
+      console.log('🔄 Reconnexion ' + reconnectCount + '/' + MAX_RECONNECT + ' dans ' + (delai/1000) + 'secondes...');
+      setTimeout(connecterWhatsApp, delai);
+
     } else if (connection === 'open') {
+      reconnectCount = 0; // reset compteur après succès
       console.log('✅ WhatsApp connecté !');
-      global.currentQR = null;
-      global.pairingCode = null;
       global.botConnected = true;
       await envoyerMessage(CONFIG.MON_NUMERO + '@s.whatsapp.net',
-        '🤖 *Bot Kinkole démarré !*\n\nEnvoie *menu* pour commencer.');
+        '🤖 *Bot Kinkole actif !*\n\nEnvoie *menu* pour commencer.');
     }
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return;
-
     for (const msg of messages) {
       if (msg.key.fromMe) continue;
-      if (msg.key.remoteJid.includes('@g.us')) continue; // ignorer groupes
-
+      if (msg.key.remoteJid.includes('@g.us')) continue;
       const expediteur = msg.key.remoteJid.replace('@s.whatsapp.net', '');
-      if (expediteur !== CONFIG.MON_NUMERO) continue; // seulement toi
-
-      const texte = msg.message?.conversation ||
-                    msg.message?.extendedTextMessage?.text || '';
+      if (expediteur !== CONFIG.MON_NUMERO) continue;
+      const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       if (!texte) continue;
-
-      console.log(`📨 Message de ${expediteur}: ${texte}`);
+      console.log('📨 Message: ' + texte);
       await traiterMessage(msg.key.remoteJid, texte);
     }
   });
 }
 
-// ============ SERVEUR HTTP (keep-alive Railway) ============
+// ============ SERVEUR HTTP ============
 const server = http.createServer(async (req, res) => {
   if (global.botConnected) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px">✅ Bot Kinkole connecté et actif !</h1>');
-    return;
-  }
-  if (global.pairingCode) {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`
-      <html><body style="text-align:center;font-family:sans-serif;padding:40px">
-      <h2>🤖 Bot Kinkole - Connexion</h2>
-      <p>Entre ce code dans WhatsApp :</p>
-      <h1 style="font-size:48px;letter-spacing:8px;color:#25D366">${global.pairingCode}</h1>
-      <p>WhatsApp → ⋮ → Appareils connectés → Connecter avec numéro de téléphone</p>
-      <p><small>Rafraîchis la page si le code expire</small></p>
-      </body></html>
-    `);
-    return;
-  }
-  if (global.currentQR) {
-    try {
-      const qrImage = await QRCode.toDataURL(global.currentQR);
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(`
-        <html><body style="text-align:center;font-family:sans-serif;padding:20px">
-        <h2>🤖 Bot Kinkole - Scanner le QR Code</h2>
-        <img src="${qrImage}" style="width:300px;height:300px"/>
-        <p><small>Rafraîchis la page si le QR expire</small></p>
-        </body></html>
-      `);
-    } catch(e) {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('QR code en cours de génération... Rafraîchis dans 5 secondes.');
-    }
+    res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px;color:green">✅ Bot Kinkole connecté et actif !</h1>');
   } else {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot démarrage en cours... Rafraîchis dans 5 secondes.');
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1 style="font-family:sans-serif;text-align:center;margin-top:50px;color:orange">⏳ Bot en cours de connexion...</h1>');
   }
 });
 
 server.listen(CONFIG.PORT, () => {
-  console.log(`🌐 Serveur HTTP sur port ${CONFIG.PORT}`);
+  console.log('🌐 Serveur HTTP sur port ' + CONFIG.PORT);
 });
 
 // ============ DÉMARRAGE ============
