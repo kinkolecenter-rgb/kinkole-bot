@@ -96,9 +96,10 @@ async function startBot() {
             if (texte === 'PING') {
                 console.log("🛠️ TEST DIRECT EN COURS...");
                 try {
-                    // LA SOLUTION : On répond au LID, mais on CITE le message entrant
-                    await sock.sendMessage(msg.key.remoteJid, { text: "PONG ! Si tu vois ça, la méthode de citation fonctionne." }, { quoted: msg });
-                    console.log("✅ PONG ENVOYÉ !");
+                    // On envoie au vrai numéro, SANS CITATION pour ne pas déclencher le bug de sécurité
+                    const vraiNumero = `${config.monNumero}@s.whatsapp.net`;
+                    await sock.sendMessage(vraiNumero, { text: "PONG ! Si tu vois ça, c'est que l'envoi propre fonctionne." });
+                    console.log("✅ PONG ENVOYÉ SANS ERREUR ACK !");
                 } catch (erreur) {
                     console.error("❌ ERREUR LORS DE L'ENVOI :", erreur);
                 }
