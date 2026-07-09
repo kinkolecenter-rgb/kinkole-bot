@@ -78,43 +78,40 @@ async function startBot() {
             console.log('✅ WhatsApp connecté !');
         }
     });
-    
-sock.ev.on('messages.upsert', async ({ messages, type }) => {
+
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         
         for (const msg of messages) {
-            // On ignore les messages du bot lui-même ou des groupes
             if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
             
-            // Extraction robuste du numéro
+            // Extraction de l'expéditeur
             const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
             
             console.log(`\n📩 NOUVEAU MESSAGE DÉTECTÉ`);
-            console.log(`👤 De : ${expediteur} | 🎯 Attendu : ${config.monNumero}`);
+            console.log(`👤 De : ${expediteur} | 🎯 Attendu : ${config.monNumero} ou ${config.monLid}`);
             
-            // --- MODIFICATION ICI ---
-            // On autorise ton vrai numéro ET ton identifiant interne WhatsApp (LID)
-            const numerosAutorises = [String(config.monNumero), '204685424214253'];
-            
-            if (!numerosAutorises.includes(expediteur)) {
+            // TON FILTRE PROPRE : On accepte le numéro classique OU le LID
+            if (expediteur !== String(config.monNumero) && expediteur !== String(config.monLid)) {
                 console.log(`🚫 Message ignoré (Numéro non autorisé)`);
                 continue; 
             }
-            // ------------------------
             
-            // Extraction du texte
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
             console.log(`📝 Texte reçu : "${texte}"`);
             
             if (texte) {
-                // 1. On marque le message comme "Lu" (les doubles coches bleues)
+                // 1. On marque comme lu
                 await sock.readMessages([msg.key]);
                 
-                // 2. On simule que le bot est "en train d'écrire..."
-                await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
+                // 2. FORCER LE VRAI DESTINATAIRE : On ignore le @lid pour la réponse
+                const vraiDestinataire = `${config.monNumero}@s.whatsapp.net`;
                 
-                // 3. On utilise le vrai remoteJid (le LID) et on passe le message complet (msg)
-                await traiterMessage(sock, msg.key.remoteJid, texte, msg);
+                // 3. Simuler la frappe et envoyer sur le vrai numéro
+                await sock.sendPresenceUpdate('composing', vraiDestinataire);
+                
+                // 4. On passe "vraiDestinataire" au lieu de "msg.key.remoteJid"
+                await traiterMessage(sock, vraiDestinataire, texte, msg);
             } else {
                 console.log(`⚠️ Le message ne contient pas de texte lisible.`);
             }
