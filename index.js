@@ -432,7 +432,7 @@ const server = http.createServer(async (req, res) => {
         <p>Ouvre WhatsApp sur <b>243897077439</b> → Appareils connectés → Connecter</p>
         <img src="${qrImage}" style="width:300px;height:300px"/>
         <p><small>La page se rafraîchit automatiquement...</small></p>
-        <script>setTimeout(()=>location.reload(), 20000)</script>
+        
       </body></html>`);
     } catch(e) {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
