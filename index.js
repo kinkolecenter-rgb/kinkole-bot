@@ -25,7 +25,7 @@ redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v3');
+    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v4');
 
     const sock = makeWASocket({
         version,
@@ -53,7 +53,7 @@ async function startBot() {
 
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 console.log('🔴 Session expirée. Nettoyage Redis...');
-                const keys = await redis.keys('kinkole-session-v3:*');
+                const keys = await redis.keys('kinkole-session-v4:*');
                 if (keys.length > 0) await redis.del(keys);
                 console.log('🔄 Relance pour nouveau QR...');
                 startBot();
