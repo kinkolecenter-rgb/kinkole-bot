@@ -1,3 +1,7 @@
+console.log(
+  "Baileys version:",
+  require("@whiskeysockets/baileys/package.json").version
+);
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
