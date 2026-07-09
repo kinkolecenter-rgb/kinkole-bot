@@ -50,29 +50,35 @@ async function startBot() {
         if (connection === 'close') {
             isConnected = false;
             currentQR = null;
-            const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             
-            console.log('❌ Connexion fermée. Code erreur:', lastDisconnect.error?.output?.statusCode);
+            // On extrait le code d'erreur proprement
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            console.log('❌ Connexion fermée. Code erreur:', statusCode);
             
-            if (shouldReconnect) {
+            // Si l'erreur est 401 (Logged Out), on vide la base de données
+            if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+                console.log('🔴 Session expirée ou révoquée (401). Nettoyage de Redis...');
+                
+                // On efface les anciennes clés corrompues
+                const keys = await redis.keys('kinkole-session:*');
+                if (keys.length > 0) {
+                    await redis.del(keys);
+                }
+                
+                console.log('🔄 Relance immédiate pour générer un nouveau QR Code...');
+                startBot();
+            } else {
+                // Pour toute autre erreur de réseau (ex: 515), on tente une reconnexion
                 console.log('🔄 Reconnexion dans 5s...');
                 setTimeout(startBot, 5000);
-            } else {
-                console.log('⚠️ Déconnecté manuellement. Suppression de la session Redis...');
-                const keys = await redis.keys('kinkole-session:*');
-                if (keys.length > 0) await redis.del(keys);
-                startBot();
             }
         } else if (connection === 'open') {
             isConnected = true;
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
-            try {
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: '🤖 *Bot Kinkole 2.0 actif et connecté !*' });
-            } catch (e) {}
         }
     });
-
+    
 sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         
