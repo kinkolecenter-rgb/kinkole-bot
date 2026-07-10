@@ -99,10 +99,7 @@ module.exports = async function traiterMessage(sock, jid, texte) {
 
     const send = async (dest, txt) => {
         try {
-            const cible = dest.includes('@lid')
-                ? `${config.monNumero}@s.whatsapp.net`
-                : dest;
-            await sock.sendMessage(cible, { text: txt });
+            await sock.sendMessage(dest, { text: txt });
         } catch (e) {
             console.error('❌ Erreur envoi:', e);
         }
