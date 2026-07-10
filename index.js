@@ -113,6 +113,9 @@ async function startBot() {
                     String(config.monLid),
                     String(config.numeroSecondaire)
                 ].filter(Boolean);
+                
+                console.log(`🔍 expediteur=${expediteur} | autorise=${JSON.stringify(autorise)}`);
+                
                 if (!autorise.includes(expediteur)) continue;
         
                 const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
