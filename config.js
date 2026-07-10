@@ -31,5 +31,12 @@ module.exports = {
         s_check:        { nom: 'S.check bn',        id: '243900435187-1560795042@g.us' },
         rate_fixture:   { nom: 'Rates&Fixtures',    id: '243890177777-1574181414@g.us' }
     },
+
+    managers: {
+    '243900014909@s.whatsapp.net': { nom: 'Eric',     role: 'Manager' },
+    '243903533322@s.whatsapp.net': { nom: 'Timothée', role: 'Manager' },
+    '243898170279@s.whatsapp.net': { nom: 'Déborah',  role: 'Ass. Manager' },
+    '243904323374@s.whatsapp.net': { nom: 'Trésor',   role: 'Ass. Manager' }
+    },
     heuresBrief: ['10:00', '12:00', '17:00']
 };
