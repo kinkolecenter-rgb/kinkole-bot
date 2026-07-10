@@ -68,10 +68,14 @@ async function startBot() {
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
             // Affiche tous les groupes
-            const groupes = await sock.groupFetchAllParticipating();
-            Object.values(groupes).forEach(g => {
-                console.log(`📌 ${g.subject} → ${g.id}`);
-            });
+            try {
+                const groupes = await sock.groupFetchAllParticipating();
+                Object.values(groupes).forEach(g => {
+                    console.log(`📌 ${g.subject} → ${g.id}`);
+                });
+            } catch(e) {
+                console.error('❌ Erreur groupes:', e.message);
+            }
         }
     });
 
