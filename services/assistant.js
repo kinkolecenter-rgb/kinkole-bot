@@ -3,9 +3,14 @@ const { genererBrief, repondreQuestion, preparerRapport } = require('./groq');
 
 module.exports = function creerAssistant(sock, memoire) {
 
-    const send = async (txt) => {
+    const send = async (txt, dest = null) => {
         try {
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: txt });
+            const cible = dest || `${config.monNumero}@s.whatsapp.net`;
+            await sock.sendMessage(cible, { text: txt });
+            // Envoyer aussi vers le secondaire si différent
+            if (cible !== `${config.secondaireLid}@lid`) {
+                await sock.sendMessage(`${config.secondaireLid}@lid`, { text: txt });
+            }
         } catch (e) {
             console.error('❌ Erreur envoi assistant:', e.message);
         }
