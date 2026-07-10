@@ -99,55 +99,37 @@ async function startBot() {
     });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
-
-        for (const msg of messages) {
-           if (msg.key.fromMe) continue;
-            // Ligne groupe commentée temporairement
-            // if (msg.key.remoteJid.includes('@g.us')) continue;
-            
-            console.log(`📌 GROUPE JID: ${msg.key.remoteJid}`);
-            
-            const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
-            const autorise = [
-                String(config.monNumero),
-                String(config.monLid),
-                String(config.numeroSecondaire)
-            ].filter(Boolean);
-            if (!autorise.includes(expediteur)) continue;
-
-            const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
-            if (!texte) continue;
-
-            console.log(`📝 "${texte}" | JID: ${msg.key.remoteJid}`);
-
-            // Commande de test
-            if (texte.trim().toUpperCase() === 'PING') {
-                const contact = await sock.onWhatsApp(config.monNumero);
-                if (contact?.length > 0) {
-                    await sock.sendMessage(contact[0].jid, { text: 'PONG ✅' });
+            if (type !== 'notify') return;
+        
+            for (const msg of messages) {
+                // LOG TOUT sans filtre
+                console.log(`📨 MSG: fromMe=${msg.key.fromMe} | JID=${msg.key.remoteJid} | texte=${msg.message?.conversation || ''}`);
+        
+                if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
+        
+                const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
+                const autorise = [
+                    String(config.monNumero),
+                    String(config.monLid),
+                    String(config.numeroSecondaire)
+                ].filter(Boolean);
+                if (!autorise.includes(expediteur)) continue;
+        
+                const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+                if (!texte) continue;
+        
+                console.log(`📝 "${texte}" | JID: ${msg.key.remoteJid}`);
+        
+                if (texte.trim().toUpperCase() === 'PING') {
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: 'PONG ✅' });
+                    continue;
                 }
-                continue;
+        
+                await sock.readMessages([msg.key]);
+                await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
+                await traiterMessage(sock, msg.key.remoteJid, texte);
             }
-
-            await sock.readMessages([msg.key]);
-            await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
-            
-            if (texte.trim().toUpperCase() === 'GROUPES') {
-                try {
-                    const groupes = await sock.groupFetchAllParticipating();
-                    const liste = Object.values(groupes);
-                    let rep = `📊 ${liste.length} groupe(s) :\n\n`;
-                    liste.forEach(g => rep += `📌 ${g.subject}\n${g.id}\n\n`);
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: rep || 'Aucun groupe trouvé' });
-                } catch(e) {
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `❌ Erreur: ${e.message}` });
-                }
-                continue;
-            }
-            await traiterMessage(sock, msg.key.remoteJid, texte);
-        }
-    });
+        });
 }
 
 // Interface Web QR
