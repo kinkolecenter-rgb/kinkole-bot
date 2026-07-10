@@ -109,7 +109,11 @@ async function startBot() {
             console.log(`📌 GROUPE JID: ${msg.key.remoteJid}`);
             
             const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
-            const autorise = [String(config.monNumero), String(config.monLid)];
+            const autorise = [
+                String(config.monNumero),
+                String(config.monLid),
+                String(config.numeroSecondaire)
+            ].filter(Boolean);
             if (!autorise.includes(expediteur)) continue;
 
             const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
