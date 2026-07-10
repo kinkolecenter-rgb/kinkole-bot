@@ -9,7 +9,7 @@ const redisStore = require('./auth/redisStore');
 const traiterMessage = require('./services/reportService');
 const creerMemoire = require('./services/memoire');
 const creerAssistant = require('./services/assistant');
-const { genererBrief } = require('./services/groq');
+const { agentBrief } = require('./services/agents');
 
 const app = express();
 let currentQR = null;
