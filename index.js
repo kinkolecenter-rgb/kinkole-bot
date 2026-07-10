@@ -170,9 +170,18 @@ async function startBot() {
             await sock.sendPresenceUpdate('composing', jid);
 
             // Essayer commande assistant d'abord
+            const cmd = texte.trim().toUpperCase();
+
+            // Commandes rapides sans Groq
+            if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'ANNULER', 'CANCEL', 'STOP', 'OUI', 'NON'].includes(cmd) || 
+                ['1','2','3','4','5'].includes(cmd)) {
+                await traiterMessage(sock, jid, texte);
+                continue;
+            }
+            
+            // Commandes assistant avec Groq
             const traitePar = await assistant.traiterCommande(texte, jid);
             if (!traitePar) {
-                // Sinon bot rapports classique
                 await traiterMessage(sock, jid, texte);
             }
         }
