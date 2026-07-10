@@ -68,7 +68,10 @@ async function startBot() {
         browser: ['Kinkole Bot', 'Chrome', '2.0.0']
     });
 
-    const assistant = creerAssistant(sock, memoire);
+    // Nouveau
+    const creerContexte = require('./services/contexte');
+    const contexteConv = creerContexte(redis);
+    const assistant = creerAssistant(sock, memoire, contexteConv);
 
     sock.ev.on('creds.update', saveCreds);
 
