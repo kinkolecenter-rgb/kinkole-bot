@@ -85,8 +85,12 @@ async function startBot() {
         if (type !== 'notify') return;
 
         for (const msg of messages) {
-            if (msg.key.fromMe || msg.key.remoteJid.includes('@g.us')) continue;
-
+           if (msg.key.fromMe) continue;
+            // Ligne groupe commentée temporairement
+            // if (msg.key.remoteJid.includes('@g.us')) continue;
+            
+            console.log(`📌 GROUPE JID: ${msg.key.remoteJid}`);
+            
             const expediteur = msg.key.remoteJid.split('@')[0].split(':')[0];
             const autorise = [String(config.monNumero), String(config.monLid)];
             if (!autorise.includes(expediteur)) continue;
