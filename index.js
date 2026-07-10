@@ -117,6 +117,23 @@ async function startBot() {
                                 meta.participants.forEach(p => {
                                     console.log(`📌 ${p.id} | admin=${p.isAdmin || false}`);
                                 });
+                                
+                                const numeros = [
+                                    '243900014909',
+                                    '243903533322',
+                                    '243898170279',
+                                    '243904323374'
+                                ];
+                                for (const num of numeros) {
+                                    try {
+                                        const contact = await sock.onWhatsApp(num);
+                                        if (contact?.length > 0) {
+                                            console.log(`📌 ${num} → ${contact[0].jid}`);
+                                        }
+                                    } catch(e) {
+                                        console.error(`❌ ${num}:`, e.message);
+                                    }
+                                }
                             } catch(e) {
                                 console.error('❌ Erreur:', e.message);
                             }
