@@ -109,6 +109,20 @@ async function startBot() {
                     try {
                         await sock.groupMetadata(jid);
                         console.log(`✅ Groupe chargé: ${jid}`);
+
+                        setTimeout(async () => {
+                            try {
+                                const meta = await sock.groupMetadata('120363021280044937@g.us');
+                                console.log(`👥 Membres Synchro Kinkole :`);
+                                meta.participants.forEach(p => {
+                                    console.log(`📌 ${p.id} | admin=${p.isAdmin || false}`);
+                                });
+                            } catch(e) {
+                                console.error('❌ Erreur:', e.message);
+                            }
+                        }, 8000);
+
+                        
                     } catch(e) {
                         console.error(`❌ Groupe non accessible: ${jid}`);
                     }
