@@ -68,7 +68,7 @@ async function startBot() {
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
             
-            setTimeout(async () => {
+            sock.ev.on('messaging-history.set', async ({ chats }) => {
                 try {
                     const groupes = await sock.groupFetchAllParticipating();
                     const liste = Object.values(groupes);
@@ -77,7 +77,7 @@ async function startBot() {
                 } catch(e) {
                     console.error('❌ Erreur groupes:', e.message);
                 }
-            }, 5000); // attend 5s après connexion
+            });
         }
     });
 
