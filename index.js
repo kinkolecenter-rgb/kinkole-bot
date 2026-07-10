@@ -162,7 +162,7 @@ async function startBot() {
 
             // PING
             if (texte.trim().toUpperCase() === 'PING') {
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: 'PONG ✅' });
+                await sock.sendMessage(jid, { text: 'PONG ✅' });
                 continue;
             }
 
