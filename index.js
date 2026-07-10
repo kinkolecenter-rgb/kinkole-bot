@@ -111,7 +111,7 @@ async function startBot() {
                 const autorise = [
                     String(config.monNumero),
                     String(config.monLid),
-                    String(config.numeroSecondaire)
+                    String(config.secondaireLid)
                 ].filter(Boolean);
                 
                 console.log(`🔍 expediteur=${expediteur} | autorise=${JSON.stringify(autorise)}`);
