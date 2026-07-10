@@ -107,6 +107,19 @@ async function startBot() {
 
             await sock.readMessages([msg.key]);
             await sock.sendPresenceUpdate('composing', msg.key.remoteJid);
+            
+            if (texte.trim().toUpperCase() === 'GROUPES') {
+                try {
+                    const groupes = await sock.groupFetchAllParticipating();
+                    const liste = Object.values(groupes);
+                    let rep = `📊 ${liste.length} groupe(s) :\n\n`;
+                    liste.forEach(g => rep += `📌 ${g.subject}\n${g.id}\n\n`);
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: rep || 'Aucun groupe trouvé' });
+                } catch(e) {
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `❌ Erreur: ${e.message}` });
+                }
+                continue;
+            }
             await traiterMessage(sock, msg.key.remoteJid, texte);
         }
     });
