@@ -67,6 +67,23 @@ async function startBot() {
             isConnected = true;
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
+
+            // Pré-charger les métadonnées des groupes cibles
+            setTimeout(async () => {
+                const cibles = [
+                    '120363027433348642@g.us',
+                    '243900435187-1560795042@g.us',
+                    '243890177777-1574181414@g.us'
+                ];
+                for (const jid of cibles) {
+                    try {
+                        await sock.groupMetadata(jid);
+                        console.log(`✅ Groupe chargé: ${jid}`);
+                    } catch(e) {
+                        console.error(`❌ Groupe non accessible: ${jid} →`, e.message);
+                    }
+                }
+            }, 5000);
             
             sock.ev.on('messaging-history.set', async ({ chats }) => {
                 try {
