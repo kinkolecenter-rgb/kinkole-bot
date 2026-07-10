@@ -1,18 +1,31 @@
 const config = require('../config');
-const { genererBrief, repondreQuestion, preparerRapport } = require('./groq');
+const {
+    agentIntention,
+    agentIncidents,
+    agentRapports,
+    agentPerformance,
+    agentRecherche,
+    agentRecommandations,
+    agentBrief
+} = require('./agents');
 
-module.exports = function creerAssistant(sock, memoire) {
+module.exports = function creerAssistant(sock, memoire, contexte) {
 
-    const send = async (txt, dest = null) => {
+    const enAttente = new Map();
+
+    const send = async (txt, jid = null) => {
         try {
-            const cible = dest || `${config.monNumero}@s.whatsapp.net`;
-            await sock.sendMessage(cible, { text: txt });
-            // Envoyer aussi vers le secondaire si différent
-            if (cible !== `${config.secondaireLid}@lid`) {
-                await sock.sendMessage(`${config.secondaireLid}@lid`, { text: txt });
+            const cibles = [
+                `${config.monNumero}@s.whatsapp.net`,
+                `${config.secondaireLid}@lid`
+            ];
+            for (const cible of cibles) {
+                try {
+                    await sock.sendMessage(cible, { text: txt });
+                } catch (e) {}
             }
         } catch (e) {
-            console.error('❌ Erreur envoi assistant:', e.message);
+            console.error('❌ Erreur envoi:', e.message);
         }
     };
 
@@ -24,115 +37,179 @@ module.exports = function creerAssistant(sock, memoire) {
         }
     };
 
-    // Etats pour approbation rapport
-    const enAttente = new Map();
+    const getPeriodeHeures = (periode) => {
+        const map = { '3h': 3, '6h': 6, '12h': 12, '24h': 24, '48h': 48 };
+        return map[periode] || 3;
+    };
 
     const traiterCommande = async (texte, jid) => {
-        const msg = texte.trim().toLowerCase();
+        const cmd = texte.trim().toUpperCase();
 
-        // BRIEF
-        if (msg === 'brief' || msg === 'résumé' || msg === 'resume') {
-            await send('⏳ Analyse en cours...');
-            const messages = await memoire.getMessagesDepuis(3);
-            const brief = await genererBrief(messages);
-            await send(`📊 *BRIEF - ${new Date().toLocaleTimeString('fr-FR')}*\n\n${brief}`);
+        // ── Commandes rapides sans IA ──
+        if (cmd === 'RESET' || cmd === 'EFFACER') {
+            await contexte.viderHistorique(jid);
+            await send('🗑️ Historique de conversation effacé.', jid);
             return true;
         }
 
-        // BRIEF ETENDU
-        if (msg === 'brief 24h') {
-            await send('⏳ Analyse des dernières 24h...');
-            const messages = await memoire.getMessagesDepuis(24);
-            const brief = await genererBrief(messages);
-            await send(`📊 *BRIEF 24H*\n\n${brief}`);
+        if (cmd === 'AIDE' || cmd === 'HELP') {
+            await send(
+                `🤖 *KINKOLE AI — Assistant Center Manager*\n\n` +
+                `Tu peux me parler naturellement :\n\n` +
+                `💬 *"Comment se passe mon centre ?"*\n` +
+                `💬 *"Y a-t-il des urgences ?"*\n` +
+                `💬 *"Comment travaille Eric ?"*\n` +
+                `💬 *"Que s'est-il passé ce matin ?"*\n` +
+                `💬 *"Prépare un rapport journalier"*\n` +
+                `💬 *"Qui parle des paiements ?"*\n` +
+                `💬 *"Recommande moi quelque chose"*\n\n` +
+                `📋 *Commandes rapides :*\n` +
+                `• *menu* → bot rapports classique\n` +
+                `• *incidents* → urgences détectées\n` +
+                `• *managers* → performance équipe\n` +
+                `• *reset* → effacer historique\n\n` +
+                `📤 *Approbation rapport :*\n` +
+                `• *approuver [id] [destination]*\n` +
+                `• Destinations : gestion_center, s_check, rate_fixture`,
+                jid
+            );
             return true;
         }
 
-        // PREPARER RAPPORT
-        if (msg.startsWith('rapport ')) {
-            const type = texte.substring(8).trim();
-            await send(`⏳ Préparation du rapport "${type}"...`);
-            const messages = await memoire.getMessagesDepuis(12);
-            const rapport = await preparerRapport(type, messages);
-
-            // Stocker en attente d'approbation
-            const id = Date.now().toString();
-            enAttente.set(id, { rapport, type });
-
-            await send(`📋 *RAPPORT PRÊT - ID: ${id}*\n\n${rapport}\n\n──────────────\nEnvoie *approuver ${id} [gestion_center/s_check/rate_fixture]* pour envoyer.`);
-            return true;
-        }
-
-        // APPROBATION
-        if (msg.startsWith('approuver ')) {
+        // Approbation rapport
+        if (cmd.startsWith('APPROUVER ')) {
             const parties = texte.trim().split(' ');
             const id = parties[1];
             const destination = parties[2];
 
             if (!enAttente.has(id)) {
-                await send('❌ ID rapport introuvable.');
+                await send('❌ ID rapport introuvable.', jid);
                 return true;
             }
 
             const groupe = config.groupesDestination[destination];
             if (!groupe) {
-                await send('❌ Destination invalide. Utilise: gestion_center, s_check ou rate_fixture');
+                await send('❌ Destination invalide.\nUtilise: gestion_center, s_check ou rate_fixture', jid);
                 return true;
             }
 
             const { rapport } = enAttente.get(id);
             await sendVersGroupe(groupe.id, rapport);
             enAttente.delete(id);
-            await send(`✅ Rapport envoyé dans *${groupe.nom}*`);
+            await send(`✅ Rapport envoyé dans *${groupe.nom}*`, jid);
             return true;
         }
 
-        // MESSAGES D'UN GROUPE
-        if (msg.startsWith('messages ')) {
-            const nomGroupe = texte.substring(9).trim();
-            const messages = await memoire.getTousMessages(30);
-            const filtres = messages.filter(m =>
-                m.groupeNom.toLowerCase().includes(nomGroupe.toLowerCase())
-            );
+        // ── Commandes directes ──
+        if (cmd === 'INCIDENTS' || cmd === 'URGENCES') {
+            await send('🔍 Analyse des incidents en cours...', jid);
+            const historique = await contexte.getHistorique(jid);
+            const messages = await memoire.getMessagesDepuis(6);
+            const reponse = await agentIncidents(messages, historique);
+            await contexte.ajouterEchange(jid, 'user', texte);
+            await contexte.ajouterEchange(jid, 'assistant', reponse);
+            await send(reponse, jid);
+            return true;
+        }
 
-            if (filtres.length === 0) {
-                await send(`📭 Aucun message trouvé pour "${nomGroupe}"`);
-                return true;
+        if (cmd === 'MANAGERS' || cmd === 'PERFORMANCE') {
+            await send('📊 Analyse des performances...', jid);
+            const historique = await contexte.getHistorique(jid);
+            const messages = await memoire.getMessagesDepuis(12);
+            const reponse = await agentPerformance(messages, null, historique);
+            await contexte.ajouterEchange(jid, 'user', texte);
+            await contexte.ajouterEchange(jid, 'assistant', reponse);
+            await send(reponse, jid);
+            return true;
+        }
+
+        // ── Langage naturel via Agent Intention ──
+        await send('🤔 Analyse en cours...', jid);
+
+        const historique = await contexte.getHistorique(jid);
+        const intention = await agentIntention(texte, historique);
+
+        console.log(`🧠 Intention: ${intention.intention} | Confiance: ${intention.confiance}`);
+
+        let reponse = '';
+        const heures = getPeriodeHeures(intention.parametres?.periode);
+
+        switch (intention.intention) {
+
+            case 'brief': {
+                const messages = await memoire.getMessagesDepuis(heures);
+                reponse = await agentBrief(messages, historique);
+                break;
             }
 
-            const liste = filtres.slice(-20).map(m =>
-                `[${new Date(m.timestamp).toLocaleTimeString('fr-FR')}] ${m.expediteur}: ${m.texte}`
-            ).join('\n\n');
+            case 'incidents': {
+                const messages = await memoire.getMessagesDepuis(heures);
+                reponse = await agentIncidents(messages, historique);
+                break;
+            }
 
-            await send(`📨 *Messages - ${nomGroupe}*\n\n${liste}`);
-            return true;
+            case 'performance': {
+                const messages = await memoire.getMessagesDepuis(12);
+                const manager = intention.parametres?.manager;
+                reponse = await agentPerformance(messages, manager, historique);
+                break;
+            }
+
+            case 'rapport': {
+                const messages = await memoire.getMessagesDepuis(12);
+                const type = intention.parametres?.type_rapport || 'journalier';
+                reponse = await agentRapports(messages, type, historique);
+
+                const id = Date.now().toString();
+                enAttente.set(id, { rapport: reponse, type });
+                reponse += `\n\n──────────────\n📤 *ID: ${id}*\nEnvoie *approuver ${id} [destination]* pour publier.`;
+                break;
+            }
+
+            case 'recherche': {
+                const messages = await memoire.getMessagesDepuis(12);
+                const question = intention.parametres?.question || texte;
+                reponse = await agentRecherche(question, messages, historique);
+                break;
+            }
+
+            case 'recommandation': {
+                const messages = await memoire.getMessagesDepuis(6);
+                reponse = await agentRecommandations(messages, historique);
+                break;
+            }
+
+            case 'reset': {
+                await contexte.viderHistorique(jid);
+                reponse = '🗑️ Historique effacé.';
+                break;
+            }
+
+            default: {
+                // Question libre → agent recherche
+                const messages = await memoire.getMessagesDepuis(6);
+                reponse = await agentRecherche(texte, messages, historique);
+                break;
+            }
         }
 
-        // QUESTION LIBRE
-        if (msg.startsWith('?') || msg.startsWith('question ')) {
-            const question = texte.substring(msg.startsWith('?') ? 1 : 9).trim();
-            await send('🤔 Recherche en cours...');
-            const messages = await memoire.getMessagesDepuis(12);
-            const reponse = await repondreQuestion(question, messages);
-            await send(`💬 *Réponse*\n\n${reponse}`);
-            return true;
-        }
+        // Sauvegarder dans le contexte
+        await contexte.ajouterEchange(jid, 'user', texte);
+        await contexte.ajouterEchange(jid, 'assistant', reponse);
 
-        // AIDE
-        if (msg === 'aide' || msg === 'help') {
-            await send(`🤖 *ASSISTANT KINKOLE*\n\n*Commandes disponibles :*\n\n📊 *brief* → résumé des 3 dernières heures\n📊 *brief 24h* → résumé des 24 dernières heures\n📋 *rapport [type]* → prépare un rapport\n✅ *approuver [id] [destination]* → envoie le rapport\n📨 *messages [groupe]* → voir messages d'un groupe\n❓ *? [question]* → poser une question\n📋 *menu* → bot rapports classique\n\n*Destinations :* gestion_center, s_check, rate_fixture`);
-            return true;
-        }
-
-        return false; // pas une commande assistant
+        await send(reponse, jid);
+        return true;
     };
 
     const briefAutomatique = async () => {
         console.log('⏰ Brief automatique...');
         const messages = await memoire.getMessagesDepuis(3);
-        if (messages.length === 0) return;
-        const brief = await genererBrief(messages);
-        await send(`⏰ *BRIEF AUTOMATIQUE - ${new Date().toLocaleTimeString('fr-FR')}*\n\n${brief}`);
+        if (messages.length === 0) {
+            console.log('📭 Pas de messages pour le brief');
+            return;
+        }
+        const reponse = await agentBrief(messages);
+        await send(`⏰ *BRIEF AUTOMATIQUE - ${new Date().toLocaleTimeString('fr-FR')}*\n\n${reponse}`);
     };
 
     return { traiterCommande, briefAutomatique };
