@@ -320,70 +320,71 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         
         const DELAIS_RELANCE = [15, 30, 60]; // minutes avant chaque relance
         
-        const verifierRapportsManquants = async () => {
-            const messages = await memoire.getMessagesDepuis(null);
-            const now = new Date();
-            const heure = now.getHours();
-        
-            // Rapports attendus selon l'heure
-            const attendus = [];
-            if (heure >= 5)  attendus.push({ type: 'ouverture',  label: 'Rapport ouverture matin' });
-            if (heure >= 5)  attendus.push({ type: 'fixture',    label: 'Fixtures & taux de change' });
-            if (heure >= 10) attendus.push({ type: 'coffre_matin', label: 'État coffre matin' });
-            if (heure >= 22) attendus.push({ type: 'soir',       label: 'Dernier rapport soir' });
-            if (heure >= 22) attendus.push({ type: 'coffre_soir', label: 'État coffre soir' });
-        
-            const manquants = [];
-        
-            for (const attendu of attendus) {
-                // Vérifier si déjà reçu aujourd'hui
-                const recu = messages.some(m => {
-                    const t = m.texte?.toLowerCase() || '';
-                    switch (attendu.type) {
-                        case 'ouverture':    return t.includes('ouverture du') || t.includes('bonjour team');
-                        case 'fixture':      return t.includes('fixtures sport betting') || t.includes('taux de change');
-                        case 'coffre_matin': return t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14;
-                        case 'soir':         return t.includes('dernier rapport');
-                        case 'coffre_soir':  return t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14;
-                        default: return false;
-                    }
-                });
-        
-                if (!recu) manquants.push(attendu.label);
+const verifierRapportsManquants = async () => {
+    const now = new Date();
+    const heure = now.getHours();
+    const debutJour = new Date();
+    debutJour.setHours(0, 0, 0, 0);
+    const depuis = debutJour.getTime();
+
+    // Récupérer messages de tous les groupes surveillés + groupes destination
+    const tousMessages = await memoire.getTousMessages(200);
+    
+    // Ajouter messages des groupes destination
+    const msgsGestion  = await memoire.getMessages(config.groupesDestination.gestion_center.id, 50);
+    const msgsSCheck   = await memoire.getMessages(config.groupesDestination.s_check.id, 50);
+    const msgsFixture  = await memoire.getMessages(config.groupesDestination.rate_fixture.id, 50);
+    
+    const tous = [...tousMessages, ...msgsGestion, ...msgsSCheck, ...msgsFixture]
+        .filter(m => m.timestamp >= depuis); // aujourd'hui seulement
+
+    const check = (fn) => tous.some(m => fn(m.texte?.toLowerCase() || '', m));
+
+    const attendus = [];
+    if (heure >= 9)  attendus.push({
+        type: 'ouverture',
+        label: 'Rapport ouverture matin',
+        recu: check(t => t.includes('ouverture du') || t.includes('bonjour team'))
+    });
+    if (heure >= 10) attendus.push({
+        type: 'fixture',
+        label: 'Fixtures & taux de change',
+        recu: check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))
+    });
+    if (heure >= 10) attendus.push({
+        type: 'coffre_matin',
+        label: 'État coffre matin',
+        recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14)
+    });
+    if (heure >= 22) attendus.push({
+        type: 'soir',
+        label: 'Dernier rapport soir',
+        recu: check(t => t.includes('dernier rapport'))
+    });
+    if (heure >= 22) attendus.push({
+        type: 'coffre_soir',
+        label: 'État coffre soir',
+        recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14)
+    });
+
+    const manquants = attendus.filter(a => !a.recu).map(a => a.label);
+
+    if (manquants.length > 0) {
+        for (const attendu of attendus) {
+            if (!rapportsAttendus.has(attendu.type)) {
+                rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
             }
-        
-            if (manquants.length > 0) {
-                // Initialiser suivi si pas encore fait
-                for (const attendu of attendus) {
-                    if (!rapportsAttendus.has(attendu.type)) {
-                        rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
-                    }
-                }
-        
-                await send(
-                    `⚠️ *RAPPORTS MANQUANTS*\n\n` +
-                    manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
-                    `\n\n📢 Relance envoyée aux managers.`
-                );
-        
-                // Relancer les managers
-                await relancerManagers(manquants);
-            } else {
-                // Tout reçu — nettoyer le suivi
-                rapportsAttendus.clear();
-            }
-        };
-        
-        const relancerManagers = async (manquants) => {
-            const liste = manquants.map(m => `• ${m}`).join('\n');
-            const msg = 
-                `📢 *RAPPEL — RAPPORTS EN ATTENTE*\n\n` +
-                `Les rapports suivants n'ont pas encore été reçus :\n\n${liste}\n\n` +
-                `Merci de les envoyer dès que possible. ⏰`;
-        
-            // Envoyer dans Synchro Kinkole
-            await sock.sendMessage('120363021280044937@g.us', { text: msg });
-        };
+        }
+        await send(
+            `⚠️ *RAPPORTS MANQUANTS*\n\n` +
+            manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
+            `\n\n📢 Relance envoyée aux managers.`
+        );
+        await relancerManagers(manquants);
+    } else {
+        rapportsAttendus.clear();
+    }
+};
 
     
 
