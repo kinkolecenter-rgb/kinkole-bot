@@ -49,26 +49,26 @@ Vente: [VENTE]`;
 
 async function appelerGemini(systemPrompt, userPrompt) {
     try {
-        const response = await fetch(GEMINI_URL, {
+        const response = await fetch(`${GEMINI_URL}?key=${config.geminiApiKey}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.groqApiKey}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: MODEL,
-                max_tokens: 200,
-                temperature: 0.1,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                ]
+                system_instruction: { parts: [{ text: systemPrompt }] },
+                contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+                generationConfig: {
+                    maxOutputTokens: 200,
+                    temperature: 0.1
+                }
             })
         });
         const data = await response.json();
-        if (data.error) return null;
-        return data.choices?.[0]?.message?.content || null;
+        if (data.error) {
+            console.error('❌ Gemini routeur error:', data.error.message);
+            return null;
+        }
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
     } catch (e) {
+        console.error('❌ Erreur réseau routeur:', e.message);
         return null;
     }
 }
