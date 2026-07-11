@@ -49,10 +49,17 @@ Vente: [VENTE]`;
 
 async function appelerIA(systemPrompt, userPrompt) {
     const modeles = [
-        'meta-llama/llama-3.1-8b-instruct:free',
-        'google/gemma-3-27b-it:free',
-        'mistralai/mistral-7b-instruct:free'
-    ];
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'meta-llama/llama-3.2-1b-instruct:free',
+    'google/gemma-3-27b-it:free',
+    'google/gemma-3-12b-it:free',
+    'google/gemma-3-4b-it:free',
+    'mistralai/mistral-7b-instruct:free',
+    'qwen/qwen-2.5-7b-instruct:free',
+    'deepseek/deepseek-r1-distill-llama-70b:free',
+    'microsoft/phi-3-mini-128k-instruct:free'
+];
 
     for (const model of modeles) {
         try {
