@@ -73,25 +73,47 @@ async function appelerGroq(systemPrompt, userPrompt) {
 }
 
 // Détecte si un message est un rapport et lequel
-async function detecterTypeRapport(texte) {
-    const prompt = `Analyse ce message WhatsApp et retourne UNIQUEMENT un JSON valide :
+async function detecterTypeRapport(texte, expediteur) {
+    const prompt = `Tu es un détecteur de type de message opérationnel pour Winner Bet Kinkole.
+
+RÈGLE PRINCIPALE : Tout message envoyé par un manager dans un groupe opérationnel est un rapport, même sans le mot "rapport".
+
+Retourne UNIQUEMENT un JSON valide :
 {
   "est_rapport": true/false,
-  "type": "matin|soir|coffre|fixture|inconnu",
-  "periode": "matin|soir|null"
+  "type": "ouverture|soir|coffre|fixture|composition|connexion|pos|stocks|caution|non_cloture|autre",
+  "periode": "matin|soir|null",
+  "resume": "résumé en une phrase du contenu"
 }
 
-Indices :
-- matin : "Bonjour Team", "Ouverture du", "Premier ticket", "Etat Matériel"
-- soir : "Dernier rapport", "Dernier ticket", "stocks utilisés", "shift"
-- coffre : "Coffre ok", "hormis", "Salaire", "Collecte"
-- fixture : "Fixtures sport betting", "Taux de change", "Achat", "Vente", "Nb. Pages"
+Types :
+- ouverture : "Bonjour Team", ouverture shop, premier ticket, état matériel
+- soir : "Dernier rapport", dernier ticket, stocks utilisés/restants
+- coffre : "Coffre ok", salaire, collecte
+- fixture : "Fixtures sport betting", taux de change, achat/vente
+- composition : "TEAM Composition", managers, caissiers, PR, sécurité
+- connexion : "Détails connexion", ids connectés, tickets loto, instant win
+- pos : "Rapport pos", machines en panne, backup, remplacement
+- stocks : stocks utilisés, restants, RAM, rolls
+- caution : "Rapport Reste Caution", montants agents
+- non_cloture : "Non clôture", liste d'agents
+- autre : tout autre message opérationnel
+
+IMPORTANT : 
+- "<Médias omis>" seul sans texte → est_rapport=false
+- "[Média sans légende]" → est_rapport=false
+- Message trop court (moins de 10 caractères) → est_rapport=false
+- Tout le reste envoyé par un manager → est_rapport=true
+- salutations (Bonjour, Bonsoir, Salut...)
+- remerciements (Merci, Ok, Reçu, Bien noté...)
+- emojis seuls
+- réponses courtes (Oui, Non, D'accord...)
 
 Message :
-${texte.substring(0, 500)}`;
+${texte.substring(0, 600)}`;
 
     const resultat = await appelerGroq(
-        'Tu es un détecteur de type de rapport. Retourne uniquement du JSON valide sans markdown.',
+        'Tu es un détecteur de rapport. Retourne uniquement du JSON valide sans markdown.',
         prompt
     );
 
@@ -99,7 +121,7 @@ ${texte.substring(0, 500)}`;
         const clean = resultat?.replace(/```json|```/g, '').trim();
         return JSON.parse(clean);
     } catch (e) {
-        return { est_rapport: false, type: 'inconnu' };
+        return { est_rapport: false, type: 'autre' };
     }
 }
 
@@ -143,13 +165,13 @@ Si tout est présent, retourne complet=true et manquants=[].`;
     }
 }
 
-// Destination selon type
 function getDestination(type) {
     const map = {
-        matin: 'gestion_center',
-        soir: 'gestion_center',
-        coffre: 's_check',
-        fixture: 'rate_fixture'
+        ouverture:  'gestion_center',
+        soir:       'gestion_center',
+        connexion:  'gestion_center',  // ✅ ajouté
+        coffre:     's_check',
+        fixture:    'rate_fixture'
     };
     return map[type] || null;
 }
