@@ -104,7 +104,7 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         if (cmd === 'INCIDENTS' || cmd === 'URGENCES') {
             await send('🔍 Analyse des incidents en cours...', jid);
             const historique = await contexte.getHistorique(jid);
-            const messages = await memoire.getMessagesDepuis(6);
+            const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
             const reponse = await agentIncidents(messages, historique);
             await contexte.ajouterEchange(jid, 'user', texte);
             await contexte.ajouterEchange(jid, 'assistant', reponse);
@@ -115,7 +115,7 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         if (cmd === 'MANAGERS' || cmd === 'PERFORMANCE') {
             await send('📊 Analyse des performances...', jid);
             const historique = await contexte.getHistorique(jid);
-            const messages = await memoire.getMessagesDepuis(12);
+            const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
             const reponse = await agentPerformance(messages, null, historique);
             await contexte.ajouterEchange(jid, 'user', texte);
             await contexte.ajouterEchange(jid, 'assistant', reponse);
@@ -137,26 +137,26 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         switch (intention.intention) {
 
             case 'brief': {
-                const messages = await memoire.getMessagesDepuis(heures);
+                const messages = await memoire.getMessagesDepuis(null);
                 reponse = await agentBrief(messages, historique);
                 break;
             }
 
             case 'incidents': {
-                const messages = await memoire.getMessagesDepuis(heures);
+                const messages = await memoire.getMessagesDepuis(null);
                 reponse = await agentIncidents(messages, historique);
                 break;
             }
 
             case 'performance': {
-                const messages = await memoire.getMessagesDepuis(12);
+                const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
                 const manager = intention.parametres?.manager;
                 reponse = await agentPerformance(messages, manager, historique);
                 break;
             }
 
             case 'rapport': {
-                const messages = await memoire.getMessagesDepuis(12);
+                const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
                 const type = intention.parametres?.type_rapport || 'journalier';
                 reponse = await agentRapports(messages, type, historique);
 
@@ -167,14 +167,14 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
             }
 
             case 'recherche': {
-                const messages = await memoire.getMessagesDepuis(12);
+                const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
                 const question = intention.parametres?.question || texte;
                 reponse = await agentRecherche(question, messages, historique);
                 break;
             }
 
             case 'recommandation': {
-                const messages = await memoire.getMessagesDepuis(6);
+                const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
                 reponse = await agentRecommandations(messages, historique);
                 break;
             }
@@ -187,7 +187,7 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
 
             default: {
                 // Question libre → agent recherche
-                const messages = await memoire.getMessagesDepuis(6);
+                const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
                 reponse = await agentRecherche(texte, messages, historique);
                 break;
             }
@@ -203,7 +203,7 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
 
     const briefAutomatique = async () => {
         console.log('⏰ Brief automatique...');
-        const messages = await memoire.getMessagesDepuis(3);
+        const messages = await memoire.getMessagesDepuis(intention.parametres?.date || null);
         if (messages.length === 0) {
             console.log('📭 Pas de messages pour le brief');
             return;
