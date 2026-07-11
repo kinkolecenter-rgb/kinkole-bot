@@ -302,7 +302,7 @@ async function startBot() {
         }
 
         // ── MESSAGES PRIVÉS ──
-        if (jid.includes('@g.us')) continue;
+        //if (jid.includes('@g.us')) continue;
         const texte = msg.message?.conversation ||
                       msg.message?.extendedTextMessage?.text || '';
 
