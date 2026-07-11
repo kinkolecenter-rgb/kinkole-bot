@@ -44,14 +44,15 @@ module.exports = function creerMemoire(redis) {
     };
 
     const getMessagesDepuis = async (heures = 3) => {
-    try {
+        try {
             const depuis = Date.now() - (heures * 60 * 60 * 1000);
-            const tous = await getTousMessages(100);
+            const tous = await getTousMessages(200);
+            
+            const numerosManagers = Object.keys(config.managers); // ['243900014909@s.whatsapp.net', ...]
+            
             return tous.filter(m => 
                 m.timestamp >= depuis &&
-                config.collaborateurs.some(nom => 
-                    m.expediteur?.toLowerCase().includes(nom.toLowerCase())
-                )
+                numerosManagers.includes(m.expediteurJid) // filtre par JID exact
             );
         } catch (e) {
             return [];
