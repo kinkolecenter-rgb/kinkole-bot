@@ -144,7 +144,7 @@ Analyse la demande et retourne UNIQUEMENT un JSON valide sans markdown :
 {
   "intention": "brief|incidents|performance|rapport|recherche|recommandation|reset|inconnu",
   "parametres": {
-    "periode": "3h|6h|12h|24h|48h",
+    "date": "YYYY-MM-DD si une date spécifique est mentionnée (hier, avant-hier, 10 juillet...), sinon null",
     "groupe": "nom du groupe si mentionné ou null",
     "manager": "nom du manager si mentionné ou null",
     "type_rapport": "type si mentionné ou null",
@@ -153,12 +153,15 @@ Analyse la demande et retourne UNIQUEMENT un JSON valide sans markdown :
   "confiance": 0.0
 }
 
+Date d'aujourd'hui : ${new Date().toISOString().split('T')[0]}
+
 Exemples de mapping :
-- "Comment se passe mon centre ?" → brief 3h
-- "Y a-t-il des urgences ?" → incidents
+- "Comment se passe mon centre ?" → brief, date=null
+- "Que s'est-il passé hier ?" → brief, date=hier en YYYY-MM-DD
+- "Rapport du 10 juillet" → rapport, date="2026-07-10"
+- "Y a-t-il des urgences ?" → incidents, date=null
 - "Comment travaille Eric ?" → performance, manager=Eric
-- "Que s'est-il passé ce matin ?" → brief 12h
-- "Prépare un rapport journalier" → rapport, type=journalier
+- "Prépare un rapport journalier" → rapport, date=null
 - "Qui parle des paiements ?" → recherche
 - "Efface l'historique" → reset
 - "Recommande moi quelque chose" → recommandation`;
