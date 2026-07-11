@@ -26,7 +26,6 @@ module.exports = {
         '243900435187-1564716535@g.us',
         '120363049897392666@g.us'
     ],
-    collaborateurs: ['Eric', 'Timothée', 'Déborah', 'Trésor'],
     groupesDestination: {
         gestion_center: { nom: 'Gestion Centers📢', id: '120363027433348642@g.us' },
         s_check:        { nom: 'S.check bn',        id: '243900435187-1560795042@g.us' },
@@ -39,5 +38,6 @@ module.exports = {
     '243898170279@s.whatsapp.net': { nom: 'Déborah',  role: 'Ass. Manager' },
     '243904323374@s.whatsapp.net': { nom: 'Trésor',   role: 'Ass. Manager' }
     },
-    heuresBrief: ['10:00', '12:00', '17:00']
+    heuresBrief: ['10:00', '12:00', '17:00'],
+    collaborateurs: ['Eric', 'Timothée', 'Déborah', 'Trésor']
 };
