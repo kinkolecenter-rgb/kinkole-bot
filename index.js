@@ -192,53 +192,9 @@ async function startBot() {
     sock.ev.on('messages.upsert', async (payload) => {
         await handleIncomingMessage(sock, payload, memoire, assistant);
     });
-   
-        // ── MESSAGES PRIVÉS ──
-        if (jid.includes('@g.us')) continue;
-        const texte = msg.message?.conversation ||
-                      msg.message?.extendedTextMessage?.text || '';
 
-        if (!texte) continue;
-
-        const expediteur = jid.split('@')[0].split(':')[0];
-       const autorise = [
-            String(config.monNumero),
-            String(config.monLid),
-            String(config.secondaireLid),
-            String(config.secondaireNumero) // ✅
-        ].filter(Boolean);
-
-        if (!autorise.includes(expediteur)) continue;
-
-        console.log(`📝 "${texte}" | JID: ${jid}`);
-
-        if (texte.trim().toUpperCase() === 'PING') {
-            await sock.sendMessage(jid, { text: 'PONG ✅' });
-            continue;
-        }
-
-        await sock.readMessages([msg.key]);
-        await sock.sendPresenceUpdate('composing', jid);
-
-        const cmd = texte.trim().toUpperCase();
-
-        // Commandes rapides sans Groq
-        if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'ANNULER', 'CANCEL', 'STOP', 'OUI', 'NON'].includes(cmd) ||
-            ['1','2','3','4','5'].includes(cmd)) {
-            await traiterMessage(sock, jid, texte);
-            continue;
-        }
-
-        // Commandes assistant avec Groq
-        const traitePar = await assistant.traiterCommande(texte, jid);
-        if (!traitePar) {
-            await traiterMessage(sock, jid, texte);
-        }
-    }
-});
-    
 }
-
+   
 app.get('/', (req, res) => {
     if (isConnected) {
         res.send('<h1 style="color:green;text-align:center;font-family:sans-serif;margin-top:50px">✅ Bot Kinkole connecté !</h1>');
