@@ -167,16 +167,20 @@ async function startBot() {
             if (!texte) continue;
 
             // Messages des groupes surveillés → stocker en mémoire
+            // Remplace le bloc sauvegarde dans messages.upsert
             if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
-                const expediteur = msg.pushName || msg.key.participant?.split('@')[0] || 'Inconnu';
+                const participantJid = msg.key.participant || '';
+                const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
+            
                 await memoire.sauvegarderMessage(jid, {
                     groupeJid: jid,
                     groupeNom: NOMS_GROUPES[jid] || jid,
+                    expediteurJid: participantJid,
                     expediteur,
                     texte,
                     timestamp: Date.now()
                 });
-                console.log(`💾 Sauvegardé [${NOMS_GROUPES[jid]}] ${expediteur}: ${texte.substring(0, 50)}`);
+                console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texte.substring(0, 50)}`);
                 continue;
             }
 
