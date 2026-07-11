@@ -44,10 +44,15 @@ module.exports = function creerMemoire(redis) {
     };
 
     const getMessagesDepuis = async (heures = 3) => {
-        try {
+    try {
             const depuis = Date.now() - (heures * 60 * 60 * 1000);
             const tous = await getTousMessages(100);
-            return tous.filter(m => m.timestamp >= depuis);
+            return tous.filter(m => 
+                m.timestamp >= depuis &&
+                config.collaborateurs.some(nom => 
+                    m.expediteur?.toLowerCase().includes(nom.toLowerCase())
+                )
+            );
         } catch (e) {
             return [];
         }
