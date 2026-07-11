@@ -56,7 +56,7 @@ async function appelerGroq(systemPrompt, userPrompt) {
             },
             body: JSON.stringify({
                 model: MODEL,
-                max_tokens: 1000,
+                max_tokens: 200,
                 temperature: 0.1,
                 messages: [
                     { role: 'system', content: systemPrompt },
