@@ -47,8 +47,6 @@ Taux de change
 Achat: [ACHAT]
 Vente: [VENTE]`;
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-
 async function appelerIA(systemPrompt, userPrompt) {
     const modeles = [
         'meta-llama/llama-3.1-8b-instruct:free',
