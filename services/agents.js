@@ -79,31 +79,38 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 // ============ APPEL GROQ AVEC HISTORIQUE ============
 async function appelerGemini(systemPrompt, messages, historique = []) {
     try {
-        const response = await fetch(GEMINI_URL, {
+        const contents = [
+            ...historique.map(h => ({
+                role: h.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: h.content }]
+            })),
+            ...messages.map(m => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }]
+            }))
+        ];
+
+        const response = await fetch(`${GEMINI_URL}?key=${config.geminiApiKey}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.groqApiKey}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: MODEL,
-                max_tokens: 1000,
-                temperature: 0.1, // réduit pour plus de cohérence
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    ...historique,  // ✅ historique avant le nouveau message
-                    ...messages
-                ]
+                system_instruction: { parts: [{ text: systemPrompt }] },
+                contents,
+                generationConfig: {
+                    maxOutputTokens: 1000,
+                    temperature: 0.1
+                }
             })
         });
+
         const data = await response.json();
         if (data.error) {
-            console.error('❌ Groq error:', data.error.message);
-            return '❌ Erreur Groq: ' + data.error.message;
+            console.error('❌ Gemini error:', data.error.message);
+            return '❌ Erreur Gemini: ' + data.error.message;
         }
-        return data.choices?.[0]?.message?.content || '❌ Pas de réponse';
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || '❌ Pas de réponse';
     } catch (e) {
-        console.error('❌ Erreur réseau Groq:', e.message);
+        console.error('❌ Erreur réseau Gemini:', e.message);
         return '❌ Erreur de connexion';
     }
 }
