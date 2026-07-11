@@ -175,6 +175,8 @@ async function startBot() {
             const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
         
             // Sauvegarder en mémoire
+                // Dans le bloc sauvegarde groupe, AVANT memoire.sauvegarderMessage
+            console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${msg.pushName} | Texte: ${texte.substring(0,30)}`);
             await memoire.sauvegarderMessage(jid, {
                 groupeJid: jid,
                 groupeNom: NOMS_GROUPES[jid] || jid,
