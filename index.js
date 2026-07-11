@@ -302,11 +302,11 @@ async function startBot() {
         }
 
         // ── MESSAGES PRIVÉS ──
-        //if (jid.includes('@g.us')) continue;
+        if (jid.includes('@g.us')) continue;
         const texte = msg.message?.conversation ||
                       msg.message?.extendedTextMessage?.text || '';
 
-        if (!texte) continue;
+        //if (!texte) continue;
 
         const expediteur = jid.split('@')[0].split(':')[0];
        const autorise = [
