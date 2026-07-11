@@ -29,6 +29,41 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         }
     };
 
+    // Ajoute cette fonction dans creerAssistant
+        const demanderCoffre = async () => {
+            console.log('⏰ Demande état coffre...');
+            await send(
+                `🔒 *ÉTAT DU COFFRE*\n\nMerci d'envoyer l'état du coffre maintenant.\nExemple :\n_Coffre ok hormis_\n_• Salaire_\n_• Collecte_`
+            );
+        };
+        
+        const demanderFixture = async () => {
+            console.log('⏰ Demande fixture...');
+            
+            // Récupérer le rapport d'ouverture du jour pour extraire nb_pages
+            const messages = await memoire.getMessagesDepuis(null);
+            const rapportOuverture = messages.find(m => 
+                m.texte?.includes('Ouverture du') || m.texte?.includes('Page :')
+            );
+            
+            let nbPages = '?';
+            if (rapportOuverture) {
+                const match = rapportOuverture.texte.match(/[Pp]age\s*:\s*(\d+)/);
+                if (match) nbPages = match[1];
+            }
+        
+            await send(
+                `📋 *FIXTURES — TAUX DE CHANGE*\n\n` +
+                `Nb. Pages détectées depuis rapport ouverture : *${nbPages}*\n\n` +
+                `Envoie uniquement :\n` +
+                `• Taux achat :\n` +
+                `• Taux vente :\n` +
+                `• Loto (nombre) :\n` +
+                `• Giga (nombre, 0 si absent) :\n` +
+                `• Félicitation (nombre, 0 si absent) :`
+            );
+        };
+
     const sendVersGroupe = async (groupeId, txt) => {
         try {
             await sock.sendMessage(groupeId, { text: txt });
@@ -41,6 +76,8 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         const map = { '3h': 3, '6h': 6, '12h': 12, '24h': 24, '48h': 48 };
         return map[periode] || 3;
     };
+
+    
 
     const traiterCommande = async (texte, jid) => {
         const cmd = texte.trim().toUpperCase();
@@ -200,6 +237,8 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         await send(reponse, jid);
         return true;
     };
+
+    
 
     // ✅ briefAutomatique corrigé
     const briefAutomatique = async () => {
