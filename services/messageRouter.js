@@ -1,6 +1,7 @@
 const config = require('../config');
 const traiterMessage = require('./reportService');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./routeurRapports');
+const db = require('./database'); // 👈 NOUVEAU : Import de la base de données
 
 // Les groupes (nous les déplacerons dans config.js lors de la Phase 2)
 const NOMS_GROUPES = {
@@ -93,6 +94,14 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         estMedia,
         timestamp: Date.now()
     });
+
+    // 👈 NOUVEAU : Sauvegarde dans PostgreSQL (Nouveau système)
+    try {
+        await db.upsertManager(participantJid, expediteur); // Enregistre ou met à jour le manager
+        await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia); // Sauvegarde le message
+    } catch (e) {
+        console.error('⚠️ Erreur écriture PostgreSQL ignorée pour le moment:', e.message);
+    }
 
     // ── DÉTECTION ROBUSTE DE RAPPORTS ──
     const estProbablementRapport = (
