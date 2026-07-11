@@ -42,34 +42,44 @@ module.exports = function creerMemoire(redis) {
         }
     };
 
-    const getMessagesDepuis = async (date = null) => {
-        try {
-            let depuis, jusqu;
+const getMessagesDepuis = async (date = null) => {
+    try {
+        let depuis, jusqu;
 
-            if (date) {
-                const d = new Date(date);
-                d.setHours(0, 0, 0, 0);
-                depuis = d.getTime();
-                jusqu = d.getTime() + (24 * 60 * 60 * 1000);
-            } else {
-                const minuit = new Date();
-                minuit.setHours(0, 0, 0, 0);
-                depuis = minuit.getTime();
-                jusqu = Date.now();
-            }
-
-            const tous = await getTousMessages(200);
-            const numerosManagers = Object.keys(config.managers);
-
-            return tous.filter(m =>
-                m.timestamp >= depuis &&
-                m.timestamp <= jusqu &&
-                numerosManagers.includes(m.expediteurJid)
-            );
-        } catch (e) {
-            return [];
+        if (date) {
+            const d = new Date(date);
+            d.setHours(0, 0, 0, 0);
+            depuis = d.getTime();
+            jusqu = d.getTime() + (24 * 60 * 60 * 1000);
+        } else {
+            const minuit = new Date();
+            minuit.setHours(0, 0, 0, 0);
+            depuis = minuit.getTime();
+            jusqu = Date.now();
         }
-    };
+
+        const tous = await getTousMessages(200);
+        console.log(`📊 Total messages Redis: ${tous.length}`);
+        console.log(`📊 Fenêtre: ${new Date(depuis).toISOString()} → ${new Date(jusqu).toISOString()}`);
+        
+        const parDate = tous.filter(m => m.timestamp >= depuis && m.timestamp <= jusqu);
+        console.log(`📊 Après filtre date: ${parDate.length}`);
+        
+        // Log les JIDs présents
+        const jidsUniques = [...new Set(parDate.map(m => m.expediteurJid))];
+        console.log(`📊 JIDs expéditeurs:`, jidsUniques);
+        
+        const numerosManagers = Object.keys(config.managers);
+        console.log(`📊 JIDs managers attendus:`, numerosManagers);
+
+        const resultat = parDate.filter(m => numerosManagers.includes(m.expediteurJid));
+        console.log(`📊 Après filtre managers: ${resultat.length}`);
+        
+        return resultat;
+    } catch (e) {
+        return [];
+    }
+};
 
     const viderGroupe = async (groupeJid) => {
         try {
