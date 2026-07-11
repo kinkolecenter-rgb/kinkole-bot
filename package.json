@@ -4,17 +4,22 @@
   "description": "Bot WhatsApp Kinkole",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "prisma generate"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
+    "@prisma/client": "^5.10.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.13",
     "express": "^4.21.2",
     "ioredis": "^5.4.1",
     "pino": "^9.7.0",
     "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "prisma": "^5.10.0"
   }
 }
