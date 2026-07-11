@@ -200,18 +200,18 @@ async function startBot() {
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             const participantJid = msg.key.participant || '';
             const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
-
+        
             const texte = msg.message?.conversation ||
                           msg.message?.extendedTextMessage?.text ||
                           msg.message?.imageMessage?.caption ||
                           msg.message?.videoMessage?.caption ||
                           msg.message?.documentMessage?.caption || '';
-
+        
             const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage);
             const texteStocke = estMedia && !texte ? '[Média sans légende]' : texte;
-
+        
             console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texte.substring(0, 30)}`);
-
+        
             await memoire.sauvegarderMessage(jid, {
                 groupeJid: jid,
                 groupeNom: NOMS_GROUPES[jid] || jid,
@@ -222,13 +222,11 @@ async function startBot() {
                 timestamp: Date.now()
             });
             console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texteStocke.substring(0, 50)}`);
-
-            // Dans index.js, bloc groupes surveillés
+        
+            // ── ROUTING RAPPORT MANAGER ──
             const estManager = Object.keys(config.managers).includes(participantJid);
-            
+        
             if (estManager && texte.length > 50) {
-                
-                // ✅ Filtre rapide SANS Groq — mots clés évidents
                 const estProbablementRapport = (
                     texte.includes('Ouverture du') ||
                     texte.includes('Bonjour Team') ||
@@ -241,45 +239,35 @@ async function startBot() {
                     texte.includes('Rapport Reste Caution') ||
                     texte.includes('Non clôture')
                 );
-            
+        
                 if (estProbablementRapport) {
-                    // Seulement là on appelle Groq
                     const detection = await detecterTypeRapport(texte);
-                    ...
-                }
-                // Sinon → stocké en mémoire, aucun appel Groq
-            }
-
-            // ── ROUTING RAPPORT MANAGER ──
-            const estManager = Object.keys(config.managers).includes(participantJid);
-            if (estManager && texte.length > 50) {
-                const detection = await detecterTypeRapport(texte);
-                console.log(`🔍 Détection: ${detection.type} | est_rapport: ${detection.est_rapport}`);
-
-                if (detection.est_rapport && detection.type !== 'inconnu') {
-                    const manager = config.managers[participantJid];
-                    const destination = getDestination(detection.type);
-
-                    if (destination) {
-                        const groupeDest = config.groupesDestination[destination];
-                        console.log(`📋 Rapport ${detection.type} de ${manager.nom} → ${groupeDest.nom}`);
-
-                        const completude = await verifierCompletude(texte, detection.type);
-
-                        if (completude.complet) {
-                            await sock.sendMessage(groupeDest.id, { text: texte });
-                            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                                text: `✅ *${detection.type.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
-                            });
-                        } else {
-                            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                                text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
-                                      `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
-                                      `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
-                            });
+                    console.log(`🔍 Détection: ${detection.type} | est_rapport: ${detection.est_rapport}`);
+        
+                    if (detection.est_rapport && detection.type !== 'inconnu') {
+                        const manager = config.managers[participantJid];
+                        const destination = getDestination(detection.type);
+        
+                        if (destination) {
+                            const groupeDest = config.groupesDestination[destination];
+                            console.log(`📋 Rapport ${detection.type} de ${manager.nom} → ${groupeDest.nom}`);
+        
+                            const completude = await verifierCompletude(texte, detection.type);
+        
+                            if (completude.complet) {
+                                await sock.sendMessage(groupeDest.id, { text: texte });
+                                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                                    text: `✅ *${detection.type.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
+                                });
+                            } else {
+                                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                                    text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
+                                          `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
+                                          `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
+                                });
+                            }
                         }
                     }
-                    // destination=null → stocké en mémoire uniquement
                 }
             }
             continue;
