@@ -82,5 +82,57 @@ function analyserRapport(texte) {
         donnees: donnees
     };
 }
+/**
+ * Formate un rapport de coffre brut en un modèle propre et standardisé
+ */
+function formaterRapportCoffre(texteBrut) {
+    const txt = texteBrut.toLowerCase().replace(/\n/g, ' ');
 
-module.exports = { analyserRapport };
+    let statut = "OK ✅";
+    let exceptions = [];
+    let ecarts = [];
+    let usdStatus = null;
+
+    // 1. Détection des exceptions (après "hormis", "moins", etc.)
+    if (txt.includes('collect')) exceptions.push('Collecte');
+    if (txt.includes('retenu')) exceptions.push('Retenues');
+    if (txt.includes('salaire')) exceptions.push('Salaires');
+
+    // 2. Détection des écarts (Surplus ou Reliquat)
+    // Cette Regex capture le mot "surplus" ou "reliquat" suivi d'un montant (ex: "surplus de 10.300fc")
+    const matchEcart = txt.match(/(surplus|reliquat)[\s\S]*?(\d+[\.\,]*\d*\s*(cdf|fc)?)/gi);
+    if (matchEcart) {
+        statut = "À VÉRIFIER ⚠️";
+        ecarts = matchEcart.map(e => e.charAt(0).toUpperCase() + e.slice(1));
+    }
+    if (txt.includes('b.o') || txt.includes('backoffice') || txt.includes('back office')) {
+        ecarts.push("Vérification BackOffice requise");
+    }
+
+    // 3. Détection USD (Spécifique au soir)
+    if (txt.includes('usd')) {
+        if (txt.includes('update') || txt.includes('adapted') || txt.includes('updated')) {
+            usdStatus = "Updated ✅";
+        } else if (txt.includes('moins usd')) {
+            usdStatus = "Moins USD ⚠️";
+        }
+    }
+
+    // 4. Construction du message de sortie
+    let header = usdStatus ? "🔒 *RAPPORT COFFRE DU SOIR*" : "🔒 *RAPPORT COFFRE DU MATIN*";
+    let msg = `${header}\n\n• *Statut* : ${statut}\n`;
+    
+    msg += `• *Hormis* : ${exceptions.length > 0 ? exceptions.join(', ') : 'Rien'}\n`;
+
+    if (ecarts.length > 0) {
+        msg += `• *Écarts signalés* :\n${ecarts.map(e => `  - ${e}`).join('\n')}\n`;
+    }
+
+    if (usdStatus) {
+        msg += `• *USD* : ${usdStatus}\n`;
+    }
+
+    return msg;
+}
+
+module.exports = { analyserRapport, formaterRapportCoffre };
