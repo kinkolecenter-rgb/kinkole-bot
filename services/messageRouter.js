@@ -2,6 +2,7 @@ const config = require('../config');
 const traiterMessage = require('./reportService');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./routeurRapports');
 const db = require('./database'); // 👈 NOUVEAU : Import de la base de données
+const { analyserRapport } = require('./reportEngine'); // 👈 NOUVEAU : Import du moteur
 
 // Les groupes (nous les déplacerons dans config.js lors de la Phase 2)
 const NOMS_GROUPES = {
@@ -125,9 +126,13 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     );
 
     if (estProbablementRapport) {
-        // On passe texteBrut au routeur (pour ne pas casser d'éventuelles regex existantes)
+        // L'ancien routeur pour déterminer le groupe de destination
         const detection = await detecterTypeRapport(texteBrut);
-        console.log(`🔍 Détection: ${detection.type} | est_rapport: ${detection.est_rapport}`);
+        
+        // 👈 NOUVEAU : Le moteur local extrait les données structurées
+        const analyseLocale = analyserRapport(texteBrut); 
+        
+        console.log(`🔍 Détection IA: ${detection.type} | Extraction Locale: ${analyseLocale.type}`);
 
         if (detection.est_rapport && detection.type !== 'inconnu') {
             const manager = config.managers[participantJid] || { nom: expediteur };
@@ -135,10 +140,23 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
             if (destination) {
                 const groupeDest = config.groupesDestination[destination];
-                console.log(`📋 Rapport ${detection.type} de ${manager.nom} → ${groupeDest.nom}`);
-
                 const completude = await verifierCompletude(texteBrut, detection.type);
 
+                // 💾 SAUVEGARDE POSTGRESQL DU RAPPORT STRUCTURÉ
+                try {
+                    await db.sauvegarderReport(
+                        analyseLocale.type !== 'inconnu' ? analyseLocale.type : detection.type,
+                        analyseLocale.donnees || {},
+                        participantJid,
+                        completude.complet,
+                        null // Le shopId sera lié dynamiquement plus tard
+                    );
+                    console.log('✅ Rapport structuré sauvegardé dans Supabase !');
+                } catch (e) {
+                    console.error('⚠️ Erreur écriture Report Supabase:', e.message);
+                }
+
+                // Routage WhatsApp (inchangé)
                 if (completude.complet) {
                     await sock.sendMessage(groupeDest.id, { text: texteBrut });
                     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
