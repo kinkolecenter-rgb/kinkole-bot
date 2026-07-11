@@ -300,7 +300,6 @@ async function startBot() {
                 }
             }
             continue;
-        }
 
         // ── MESSAGES PRIVÉS ──
         if (jid.includes('@g.us')) continue;
