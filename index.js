@@ -10,6 +10,8 @@ const traiterMessage = require('./services/reportService');
 const creerMemoire = require('./services/memoire');
 const creerAssistant = require('./services/assistant');
 const { agentBrief } = require('./services/agents');
+const { detecterTypeRapport, verifierCompletude, getDestination } = require('./services/routeurRapports');
+
 
 const app = express();
 let currentQR = null;
@@ -169,20 +171,54 @@ async function startBot() {
             // Messages des groupes surveillés → stocker en mémoire
             // Remplace le bloc sauvegarde dans messages.upsert
             if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
-                const participantJid = msg.key.participant || '';
-                const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
-            
-                await memoire.sauvegarderMessage(jid, {
-                    groupeJid: jid,
-                    groupeNom: NOMS_GROUPES[jid] || jid,
-                    expediteurJid: participantJid,
-                    expediteur,
-                    texte,
-                    timestamp: Date.now()
-                });
-                console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texte.substring(0, 50)}`);
-                continue;
+            const participantJid = msg.key.participant || '';
+            const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
+        
+            // Sauvegarder en mémoire
+            await memoire.sauvegarderMessage(jid, {
+                groupeJid: jid,
+                groupeNom: NOMS_GROUPES[jid] || jid,
+                expediteurJid: participantJid,
+                expediteur,
+                texte,
+                timestamp: Date.now()
+            });
+            console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texte.substring(0, 50)}`);
+        
+            // Vérifier si c'est un rapport d'un manager
+            const estManager = Object.keys(config.managers).includes(participantJid);
+            if (estManager && texte.length > 50) {
+                const detection = await detecterTypeRapport(texte);
+        
+                if (detection.est_rapport && detection.type !== 'inconnu') {
+                    const manager = config.managers[participantJid];
+                    const destination = getDestination(detection.type);
+                    const groupeDest = config.groupesDestination[destination];
+        
+                    console.log(`📋 Rapport ${detection.type} détecté de ${manager.nom}`);
+        
+                    const completude = await verifierCompletude(texte, detection.type);
+        
+                    if (completude.complet) {
+                        // Envoyer dans le groupe destination
+                        await sock.sendMessage(groupeDest.id, { text: texte });
+        
+                        // Notifier Evael
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `✅ *Rapport ${detection.type.toUpperCase()}* de *${manager.nom}* envoyé automatiquement dans *${groupeDest.nom}*`
+                        });
+                    } else {
+                        // Notifier Evael des infos manquantes
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `⚠️ *Rapport ${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
+                                  `❌ Infos manquantes :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
+                                  `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
+                        });
+                    }
+                }
             }
+            continue;
+        }
 
             if (jid.includes('@g.us')) continue;
 
