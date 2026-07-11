@@ -16,7 +16,7 @@ console.log = (...args) => {
     ) return; // bloquer ces logs
     originalLog(...args);
 };
-
+const { handleIncomingMessage } = require('./services/messageRouter');
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
@@ -47,23 +47,7 @@ const redis = new Redis({
 redis.on('connect', () => console.log('✅ Connecté à Upstash Redis'));
 redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
 
-// Noms des groupes surveillés
-const NOMS_GROUPES = {
-    '120363021280044937@g.us': 'Synchro Kinkole',
-    '120363023010071105@g.us': 'Synchro Kinkole pos',
-    '120363025487823123@g.us': 'Winner Shop kinkole',
-    '120363040045715280@g.us': 'Rapport PR terrain kinko',
-    '243907634105-1540987363@g.us': 'PENALITy QS all shop',
-    '243900435187-1521782366@g.us': 'General Management',
-    '243900435187-1564931206@g.us': 'Évacuation Matériels shop',
-    '243890011696-1509543437@g.us': 'Winner printing group',
-    '120363039964661142@g.us': 'Printing Winner& Buco RDC',
-    '243900435187-1560664753@g.us': 'Team Composition Shop',
-    '243900435187-1543596785@g.us': 'MUKUMBUSU WINNER',
-    '120363024619387743@g.us': 'Suivi Carburant Kinkole',
-    '243900435187-1564716535@g.us': 'disparu,viré & no cloturé',
-    '120363049897392666@g.us': 'Entre nous'
-};
+
 
 function planifierBriefs(assistant) {
     const verifierHeure = () => {
@@ -205,102 +189,10 @@ async function startBot() {
         }
     });
 
-   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    //console.log(`📩 upsert reçu | type=${type} | nb=${messages.length}`);
-    if (type !== 'notify') return;
-
-    for (const msg of messages) {
-        //console.log(`📩 msg | fromMe=${msg.key.fromMe} | jid=${msg.key.remoteJid}`);
-        if (msg.key.fromMe) continue;
-
-        const jid = msg.key.remoteJid;
-
-        // ── GROUPES SURVEILLÉS ──
-        if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
-            const participantJid = msg.key.participant || '';
-            const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
-        
-            // Log complet du message
-            console.log(`📨 MSG GROUPE | JID: ${participantJid} | Nom: ${expediteur} | Types: ${Object.keys(msg.message || {}).join(',')}`);
-        
-            const texte = msg.message?.conversation ||
-                          msg.message?.extendedTextMessage?.text ||
-                          msg.message?.imageMessage?.caption ||
-                          msg.message?.videoMessage?.caption ||
-                          msg.message?.documentMessage?.caption || '';
-        
-            const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage);
-            const texteStocke = estMedia && !texte ? '[Média sans légende]' : texte;
-        
-            console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texte.substring(0, 30)}`);
-        
-            await memoire.sauvegarderMessage(jid, {
-                groupeJid: jid,
-                groupeNom: NOMS_GROUPES[jid] || jid,
-                expediteurJid: participantJid,
-                expediteur,
-                texte: texteStocke,
-                estMedia,
-                timestamp: Date.now()
-            });
-            console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texteStocke.substring(0, 50)}`);
-        
-            // ── ROUTING RAPPORT MANAGER ──
-            const estManager = Object.keys(config.managers).includes(participantJid);
-        
-            const estProbablementRapport = (
-                texte.includes('Ouverture du') ||
-                texte.includes('Bonjour Team') ||
-                texte.includes('Dernier rapport') ||
-                texte.includes('Coffre ok') ||
-                texte.includes('Fixtures sport betting') ||
-                texte.includes('Détails   connexion') ||  // 3 espaces
-                texte.includes('Détails  connexion') ||   // 2 espaces
-                texte.includes('Détails connexion') ||    // 1 espace
-                texte.includes('connexion 12h') ||
-                texte.includes('connexion 15h') ||
-                texte.includes('connexion 17h') ||
-                texte.includes('ids connecté') ||         // ✅ contenu du message
-                texte.includes('TEAM Composition') ||
-                texte.includes('Rapport pos') ||
-                texte.includes('Rapport Reste Caution') ||
-                texte.includes('État d activités actuel') ||
-                texte.includes('Non clôture')
-                
-                );
-        
-                if (estProbablementRapport) {
-                    const detection = await detecterTypeRapport(texte);
-                    console.log(`🔍 Détection: ${detection.type} | est_rapport: ${detection.est_rapport}`);
-        
-                    if (detection.est_rapport && detection.type !== 'inconnu') {
-                        const manager = config.managers[participantJid];
-                        const destination = getDestination(detection.type);
-        
-                        if (destination) {
-                            const groupeDest = config.groupesDestination[destination];
-                            console.log(`📋 Rapport ${detection.type} de ${manager.nom} → ${groupeDest.nom}`);
-        
-                            const completude = await verifierCompletude(texte, detection.type);
-        
-                            if (completude.complet) {
-                                await sock.sendMessage(groupeDest.id, { text: texte });
-                                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                                    text: `✅ *${detection.type.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
-                                });
-                            } else {
-                                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                                    text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
-                                          `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
-                                          `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            continue;
-
+    sock.ev.on('messages.upsert', async (payload) => {
+        await handleIncomingMessage(sock, payload, memoire, assistant);
+    });
+   
         // ── MESSAGES PRIVÉS ──
         if (jid.includes('@g.us')) continue;
         const texte = msg.message?.conversation ||
