@@ -2,7 +2,8 @@ const config = require('../config');
 
 //const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 //const MODEL = 'llama-3.3-70b-versatile';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+//const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SYSTEM_WINNER_BET = `Tu es KINKOLE AI, le bras droit numérique du Center Manager de Winner Bet Kinkole (RDC).
 
@@ -77,42 +78,44 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 🏁 DÉCISION SUGGÉRÉE`;
 
 // ============ APPEL GROQ AVEC HISTORIQUE ============
-async function appelerGemini(systemPrompt, messages, historique = []) {
-    try {
-        const contents = [
-            ...historique.map(h => ({
-                role: h.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: h.content }]
-            })),
-            ...messages.map(m => ({
-                role: m.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: m.content }]
-            }))
-        ];
+async function appelerIA(systemPrompt, messages, historique = []) {
+    const modeles = [
+        'meta-llama/llama-3.1-8b-instruct:free',
+        'google/gemma-3-27b-it:free',
+        'mistralai/mistral-7b-instruct:free'
+    ];
 
-        const response = await fetch(`${GEMINI_URL}?key=${config.geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: systemPrompt }] },
-                contents,
-                generationConfig: {
-                    maxOutputTokens: 1000,
-                    temperature: 0.1
-                }
-            })
-        });
-
-        const data = await response.json();
-        if (data.error) {
-            console.error('❌ Gemini error:', data.error.message);
-            return '❌ Erreur Gemini: ' + data.error.message;
+    for (const model of modeles) {
+        try {
+            const response = await fetch(OPENROUTER_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${config.openrouterApiKey}`,
+                    'HTTP-Referer': 'https://kinkole-bot.railway.app'
+                },
+                body: JSON.stringify({
+                    model,
+                    max_tokens: 600,
+                    temperature: 0.1,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...historique,
+                        ...messages
+                    ]
+                })
+            });
+            const data = await response.json();
+            if (!data.error && data.choices?.[0]?.message?.content) {
+                console.log(`✅ IA via ${model}`);
+                return data.choices[0].message.content;
+            }
+            console.log(`⚠️ ${model} indispo, essai suivant...`);
+        } catch (e) {
+            console.log(`⚠️ Erreur ${model}:`, e.message);
         }
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || '❌ Pas de réponse';
-    } catch (e) {
-        console.error('❌ Erreur réseau Gemini:', e.message);
-        return '❌ Erreur de connexion';
     }
+    return '❌ Tous les services IA sont temporairement indisponibles.';
 }
 
 // ============ FORMATER MESSAGES STRUCTURÉS ============
@@ -168,7 +171,7 @@ Exemples :
 - "Comment travaille Eric ?" → performance, manager=Eric
 - "Prépare un rapport journalier" → rapport`;
 
-    const resultat = await appelerGemini(prompt, [
+    const resultat = await appelerIA(prompt, [
         { role: 'user', content: texte }
     ], historique);
 
@@ -183,7 +186,7 @@ Exemples :
 // ============ AGENT INCIDENTS ============
 async function agentIncidents(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -196,7 +199,7 @@ async function agentIncidents(messages, historique = []) {
 // ============ AGENT RAPPORTS ============
 async function agentRapports(messages, typeRapport, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -210,7 +213,7 @@ async function agentRapports(messages, typeRapport, historique = []) {
 async function agentPerformance(messages, nomManager = null, historique = []) {
     const contexte = formaterMessagesStructures(messages);
     const cible = nomManager ? `du manager ${nomManager}` : 'de tous les managers';
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -222,7 +225,7 @@ async function agentPerformance(messages, nomManager = null, historique = []) {
 
 async function agentRecherche(question, messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -235,7 +238,7 @@ async function agentRecherche(question, messages, historique = []) {
 // ============ AGENT RECOMMANDATIONS ============
 async function agentRecommandations(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -249,7 +252,7 @@ async function agentRecommandations(messages, historique = []) {
 async function agentBrief(messages, historique = []) {
     if (messages.length === 0) return '📭 Aucun message reçu pour cette période.';
     const contexte = formaterMessagesStructures(messages);
-    return appelerGemini(
+    return appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
