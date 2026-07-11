@@ -187,11 +187,11 @@ async function startBot() {
     });
 
    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log(`📩 upsert reçu | type=${type} | nb=${messages.length}`);
+    //console.log(`📩 upsert reçu | type=${type} | nb=${messages.length}`);
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-        console.log(`📩 msg | fromMe=${msg.key.fromMe} | jid=${msg.key.remoteJid}`);
+        //console.log(`📩 msg | fromMe=${msg.key.fromMe} | jid=${msg.key.remoteJid}`);
         if (msg.key.fromMe) continue;
 
         const jid = msg.key.remoteJid;
