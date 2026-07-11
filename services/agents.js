@@ -129,27 +129,37 @@ Analyse la demande et retourne UNIQUEMENT un JSON valide sans markdown :
 {
   "intention": "brief|incidents|performance|rapport|recherche|recommandation|reset|inconnu",
   "parametres": {
-    "date": "YYYY-MM-DD si une date spécifique est mentionnée (hier, avant-hier, 10 juillet...), sinon null",
+    "date": "YYYY-MM-DD si date mentionnée, sinon null",
     "groupe": "nom du groupe si mentionné ou null",
     "manager": "nom du manager si mentionné ou null",
     "type_rapport": "type si mentionné ou null",
-    "question": "la question exacte si recherche"
+    "question": "la question exacte"
   },
   "confiance": 0.0
 }
 
-Date d'aujourd'hui : ${new Date().toISOString().split('T')[0]}
+Date aujourd'hui : ${new Date().toISOString().split('T')[0]}
 
-Exemples de mapping :
-- "Comment se passe mon centre ?" → brief, date=null
-- "Que s'est-il passé hier ?" → brief, date=hier en YYYY-MM-DD
-- "Rapport du 10 juillet" → rapport, date="2026-07-10"
-- "Y a-t-il des urgences ?" → incidents, date=null
+RÈGLES DE ROUTAGE :
+- brief : demande de bilan général ("comment se passe", "que s'est-il passé", "état du centre")
+- incidents : demande d'urgences/problèmes ("y a-t-il des urgences", "incidents", "pannes")
+- performance : évaluation d'un manager spécifique ("comment travaille Eric", "performance")
+- rapport : générer un rapport formel ("prépare un rapport", "rapport journalier")
+- recherche : question précise sur un fait ("combien de rapports", "qui a envoyé", "as-tu envoyé", "quel manager", "combien de tickets")
+- recommandation : demande de conseil ("que recommandes-tu", "que faire")
+- reset : effacer historique
+
+IMPORTANT : Les questions précises avec "combien", "qui", "as-tu", "quel" → toujours RECHERCHE, jamais brief.
+
+Exemples :
+- "Comment se passe mon centre ?" → brief
+- "Que s'est-il passé ce matin ?" → brief
+- "Combien de rapports envoyés ?" → recherche
+- "As-tu envoyé des rapports ?" → recherche
+- "Qui a clôturé ?" → recherche
+- "Y a-t-il des urgences ?" → incidents
 - "Comment travaille Eric ?" → performance, manager=Eric
-- "Prépare un rapport journalier" → rapport, date=null
-- "Qui parle des paiements ?" → recherche
-- "Efface l'historique" → reset
-- "Recommande moi quelque chose" → recommandation`;
+- "Prépare un rapport journalier" → rapport`;
 
     const resultat = await appelerGroq(prompt, [
         { role: 'user', content: texte }
