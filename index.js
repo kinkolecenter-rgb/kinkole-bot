@@ -50,12 +50,25 @@ function planifierBriefs(assistant) {
     const verifierHeure = () => {
         const now = new Date();
         const heure = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        if (config.heuresBrief.includes(heure)) {
-            assistant.briefAutomatique();
-        }
+        const minutes = now.getMinutes();
+
+        // Briefs automatiques
+        if (config.heuresBrief.includes(heure)) assistant.briefAutomatique();
+
+        // Demandes coffre
+        if (heure === '10:00') assistant.demanderCoffre();
+        if (heure === '22:30') assistant.demanderCoffre();
+
+        // Demande fixture
+        if (heure === '10:30') assistant.demanderFixture();
+
+        // Vérification rapports toutes les 30 minutes
+        if (minutes === 0 || minutes === 30) assistant.verifierRapportsManquants();
     };
-    setInterval(verifierHeure, 60000); // vérifie chaque minute
+
+    setInterval(verifierHeure, 60000);
 }
+
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
@@ -173,73 +186,59 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        console.log(`📩 upsert reçu | type=${type} | nb=${messages.length}`);
-        if (type !== 'notify') return;
+   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`📩 upsert reçu | type=${type} | nb=${messages.length}`);
+    if (type !== 'notify') return;
 
-        for (const msg of messages) {
-            console.log(`📩 msg | fromMe=${msg.key.fromMe} | jid=${msg.key.remoteJid}`);
-            if (msg.key.fromMe) continue;
+    for (const msg of messages) {
+        console.log(`📩 msg | fromMe=${msg.key.fromMe} | jid=${msg.key.remoteJid}`);
+        if (msg.key.fromMe) continue;
 
-            const jid = msg.key.remoteJid;
-            // Remplace la ligne texte dans le bloc groupes surveillés
-            const texte = msg.message?.conversation || 
-                          msg.message?.extendedTextMessage?.text || 
-                          msg.message?.imageMessage?.caption ||      // ✅ légende image
-                          msg.message?.videoMessage?.caption ||      // ✅ légende vidéo
-                          msg.message?.documentMessage?.caption ||   // ✅ légende document
-                          '';
-            
-            // Ajoute un indicateur si c'est un média
+        const jid = msg.key.remoteJid;
+
+        // ── GROUPES SURVEILLÉS ──
+        if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
+            const participantJid = msg.key.participant || '';
+            const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
+
+            const texte = msg.message?.conversation ||
+                          msg.message?.extendedTextMessage?.text ||
+                          msg.message?.imageMessage?.caption ||
+                          msg.message?.videoMessage?.caption ||
+                          msg.message?.documentMessage?.caption || '';
+
             const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage);
-            
+            const texteStocke = estMedia && !texte ? '[Média sans légende]' : texte;
+
+            console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texte.substring(0, 30)}`);
+
             await memoire.sauvegarderMessage(jid, {
                 groupeJid: jid,
                 groupeNom: NOMS_GROUPES[jid] || jid,
                 expediteurJid: participantJid,
                 expediteur,
-                texte: estMedia && !texte ? '[Média sans légende]' : texte,
+                texte: texteStocke,
                 estMedia,
                 timestamp: Date.now()
             });
-            if (!texte) continue;
+            console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texteStocke.substring(0, 50)}`);
 
-            // Messages des groupes surveillés → stocker en mémoire
-            // Remplace le bloc sauvegarde dans messages.upsert
-            if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
-            const participantJid = msg.key.participant || '';
-            const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
-        
-            // Sauvegarder en mémoire
-                // Dans le bloc sauvegarde groupe, AVANT memoire.sauvegarderMessage
-            console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${msg.pushName} | Texte: ${texte.substring(0,30)}`);
-            await memoire.sauvegarderMessage(jid, {
-                groupeJid: jid,
-                groupeNom: NOMS_GROUPES[jid] || jid,
-                expediteurJid: participantJid,
-                expediteur,
-                texte,
-                timestamp: Date.now()
-            });
-            console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texte.substring(0, 50)}`);
-        
-            // Vérifier si c'est un rapport d'un manager
+            // ── ROUTING RAPPORT MANAGER ──
             const estManager = Object.keys(config.managers).includes(participantJid);
             if (estManager && texte.length > 50) {
                 const detection = await detecterTypeRapport(texte);
-        
+                console.log(`🔍 Détection: ${detection.type} | est_rapport: ${detection.est_rapport}`);
+
                 if (detection.est_rapport && detection.type !== 'inconnu') {
                     const manager = config.managers[participantJid];
-                    const destination = getDestination(detection.type);
-                    const groupeDest = config.groupesDestination[destination];
-                    
-                    //----------------------------------
                     const destination = getDestination(detection.type);
 
                     if (destination) {
                         const groupeDest = config.groupesDestination[destination];
+                        console.log(`📋 Rapport ${detection.type} de ${manager.nom} → ${groupeDest.nom}`);
+
                         const completude = await verifierCompletude(texte, detection.type);
-                    
+
                         if (completude.complet) {
                             await sock.sendMessage(groupeDest.id, { text: texte });
                             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
@@ -247,77 +246,62 @@ async function startBot() {
                             });
                         } else {
                             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                                text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}`
+                                text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
+                                      `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
+                                      `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
                             });
                         }
                     }
-                    // Si destination=null → message stocké en mémoire uniquement, pas de routing
-        
-                    console.log(`📋 Rapport ${detection.type} détecté de ${manager.nom}`);
-        
-                    const completude = await verifierCompletude(texte, detection.type);
-        
-                    if (completude.complet) {
-                        // Envoyer dans le groupe destination
-                        await sock.sendMessage(groupeDest.id, { text: texte });
-        
-                        // Notifier Evael
-                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                            text: `✅ *Rapport ${detection.type.toUpperCase()}* de *${manager.nom}* envoyé automatiquement dans *${groupeDest.nom}*`
-                        });
-                    } else {
-                        // Notifier Evael des infos manquantes
-                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                            text: `⚠️ *Rapport ${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
-                                  `❌ Infos manquantes :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
-                                  `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
-                        });
-                    }
+                    // destination=null → stocké en mémoire uniquement
                 }
             }
             continue;
         }
 
-            if (jid.includes('@g.us')) continue;
+        // ── MESSAGES PRIVÉS ──
+        if (jid.includes('@g.us')) continue;
 
-            // Messages privés — vérifier autorisation
-            const expediteur = jid.split('@')[0].split(':')[0];
-            const autorise = [
-                String(config.monNumero),
-                String(config.monLid),
-                String(config.secondaireLid)
-            ].filter(Boolean);
+        const texte = msg.message?.conversation ||
+                      msg.message?.extendedTextMessage?.text || '';
 
-            if (!autorise.includes(expediteur)) continue;
+        if (!texte) continue;
 
-            console.log(`📝 "${texte}" | JID: ${jid}`);
+        const expediteur = jid.split('@')[0].split(':')[0];
+        const autorise = [
+            String(config.monNumero),
+            String(config.monLid),
+            String(config.secondaireLid)
+        ].filter(Boolean);
 
-            // PING
-            if (texte.trim().toUpperCase() === 'PING') {
-                await sock.sendMessage(jid, { text: 'PONG ✅' });
-                continue;
-            }
+        if (!autorise.includes(expediteur)) continue;
 
-            await sock.readMessages([msg.key]);
-            await sock.sendPresenceUpdate('composing', jid);
+        console.log(`📝 "${texte}" | JID: ${jid}`);
 
-            // Essayer commande assistant d'abord
-            const cmd = texte.trim().toUpperCase();
-
-            // Commandes rapides sans Groq
-            if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'ANNULER', 'CANCEL', 'STOP', 'OUI', 'NON'].includes(cmd) || 
-                ['1','2','3','4','5'].includes(cmd)) {
-                await traiterMessage(sock, jid, texte);
-                continue;
-            }
-            
-            // Commandes assistant avec Groq
-            const traitePar = await assistant.traiterCommande(texte, jid);
-            if (!traitePar) {
-                await traiterMessage(sock, jid, texte);
-            }
+        if (texte.trim().toUpperCase() === 'PING') {
+            await sock.sendMessage(jid, { text: 'PONG ✅' });
+            continue;
         }
-    });
+
+        await sock.readMessages([msg.key]);
+        await sock.sendPresenceUpdate('composing', jid);
+
+        const cmd = texte.trim().toUpperCase();
+
+        // Commandes rapides sans Groq
+        if (['MENU', 'START', '0', 'BONJOUR', 'HI', 'ANNULER', 'CANCEL', 'STOP', 'OUI', 'NON'].includes(cmd) ||
+            ['1','2','3','4','5'].includes(cmd)) {
+            await traiterMessage(sock, jid, texte);
+            continue;
+        }
+
+        // Commandes assistant avec Groq
+        const traitePar = await assistant.traiterCommande(texte, jid);
+        if (!traitePar) {
+            await traiterMessage(sock, jid, texte);
+        }
+    }
+});
+    
 }
 
 app.get('/', (req, res) => {
