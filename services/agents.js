@@ -1,7 +1,8 @@
 const config = require('../config');
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.3-70b-versatile';
+//const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+//const MODEL = 'llama-3.3-70b-versatile';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 const SYSTEM_WINNER_BET = `Tu es KINKOLE AI, le bras droit numérique du Center Manager de Winner Bet Kinkole (RDC).
 
@@ -76,7 +77,7 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 🏁 DÉCISION SUGGÉRÉE`;
 
 // ============ APPEL GROQ AVEC HISTORIQUE ============
-async function appelerGroq(systemPrompt, messages, historique = []) {
+async function appelerGemini(systemPrompt, messages, historique = []) {
     try {
         const response = await fetch(GROQ_URL, {
             method: 'POST',
@@ -160,7 +161,7 @@ Exemples :
 - "Comment travaille Eric ?" → performance, manager=Eric
 - "Prépare un rapport journalier" → rapport`;
 
-    const resultat = await appelerGroq(prompt, [
+    const resultat = await appelerGemini(prompt, [
         { role: 'user', content: texte }
     ], historique);
 
@@ -175,7 +176,7 @@ Exemples :
 // ============ AGENT INCIDENTS ============
 async function agentIncidents(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -188,7 +189,7 @@ async function agentIncidents(messages, historique = []) {
 // ============ AGENT RAPPORTS ============
 async function agentRapports(messages, typeRapport, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -202,7 +203,7 @@ async function agentRapports(messages, typeRapport, historique = []) {
 async function agentPerformance(messages, nomManager = null, historique = []) {
     const contexte = formaterMessagesStructures(messages);
     const cible = nomManager ? `du manager ${nomManager}` : 'de tous les managers';
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -214,7 +215,7 @@ async function agentPerformance(messages, nomManager = null, historique = []) {
 
 async function agentRecherche(question, messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -227,7 +228,7 @@ async function agentRecherche(question, messages, historique = []) {
 // ============ AGENT RECOMMANDATIONS ============
 async function agentRecommandations(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -241,7 +242,7 @@ async function agentRecommandations(messages, historique = []) {
 async function agentBrief(messages, historique = []) {
     if (messages.length === 0) return '📭 Aucun message reçu pour cette période.';
     const contexte = formaterMessagesStructures(messages);
-    return appelerGroq(
+    return appelerGemini(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
