@@ -223,6 +223,33 @@ async function startBot() {
             });
             console.log(`💾 [${NOMS_GROUPES[jid]}] ${expediteur}: ${texteStocke.substring(0, 50)}`);
 
+            // Dans index.js, bloc groupes surveillés
+            const estManager = Object.keys(config.managers).includes(participantJid);
+            
+            if (estManager && texte.length > 50) {
+                
+                // ✅ Filtre rapide SANS Groq — mots clés évidents
+                const estProbablementRapport = (
+                    texte.includes('Ouverture du') ||
+                    texte.includes('Bonjour Team') ||
+                    texte.includes('Dernier rapport') ||
+                    texte.includes('Coffre ok') ||
+                    texte.includes('Fixtures sport betting') ||
+                    texte.includes('Détails   connexion') ||
+                    texte.includes('TEAM Composition') ||
+                    texte.includes('Rapport pos') ||
+                    texte.includes('Rapport Reste Caution') ||
+                    texte.includes('Non clôture')
+                );
+            
+                if (estProbablementRapport) {
+                    // Seulement là on appelle Groq
+                    const detection = await detecterTypeRapport(texte);
+                    ...
+                }
+                // Sinon → stocké en mémoire, aucun appel Groq
+            }
+
             // ── ROUTING RAPPORT MANAGER ──
             const estManager = Object.keys(config.managers).includes(participantJid);
             if (estManager && texte.length > 50) {
