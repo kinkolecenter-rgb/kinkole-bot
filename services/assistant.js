@@ -160,6 +160,83 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
             return true;
         }
 
+        // Ajoute dans traiterCommande, avant le bloc langage naturel
+        // Détection réponse coffre
+        if (texte.toLowerCase().includes('coffre ok') || texte.toLowerCase().includes('coffre hormis')) {
+            const groupeDest = config.groupesDestination['s_check'];
+            await sock.sendMessage(groupeDest.id, { text: texte });
+            await send(`✅ État coffre envoyé dans *${groupeDest.nom}*`);
+            return true;
+        }
+        
+        // Détection réponse fixture (taux seulement)
+        if (texte.toLowerCase().includes('taux achat') || texte.toLowerCase().includes('achat :')) {
+            const messages = await memoire.getMessagesDepuis(null);
+            
+            // Récupérer infos depuis rapport ouverture
+            const rapportOuverture = messages.find(m => 
+                m.texte?.includes('Ouverture du') || m.texte?.includes('Page :')
+            );
+            
+            let nbPages = 9; // défaut
+            if (rapportOuverture) {
+                const match = rapportOuverture.texte.match(/[Pp]age\s*:\s*(\d+)/);
+                if (match) nbPages = parseInt(match[1]);
+            }
+        
+            // Parser les taux envoyés
+            const achatMatch = texte.match(/[Aa]chat\s*:?\s*(\d+)/);
+            const venteMatch = texte.match(/[Vv]ente\s*:?\s*(\d+)/);
+            const lotoMatch  = texte.match(/[Ll]oto\s*:?\s*(\d+)/);
+            const gigaMatch  = texte.match(/[Gg]iga\s*:?\s*(\d+)/);
+            const feliMatch  = texte.match(/[Ff]élicitation\s*:?\s*(\d+)/);
+        
+            const achat = achatMatch?.[1] || '?';
+            const vente = venteMatch?.[1] || '?';
+            const loto  = parseInt(lotoMatch?.[1] || '0');
+            const giga  = parseInt(gigaMatch?.[1] || '0');
+            const feli  = parseInt(feliMatch?.[1] || '0');
+            
+            // Calcul total/agent = (nb_pages * 2) + loto + giga + félicitation
+            const totalAgt = (nbPages * 2) + loto + giga + feli;
+        
+            const rapportFixture = 
+                `Fixtures sport betting kinkole shop\n` +
+                `Nb. Pages: ${nbPages}\n` +
+                `Nb.Copies par agent: 2\n` +
+                `Fixture (other)\n` +
+                `loto: ${loto}\n` +
+                `Giga: ${giga}\n` +
+                `Félicitation : ${feli}\n` +
+                `Total/agt: ${totalAgt}\n` +
+                `Taux de change\n` +
+                `Achat: ${achat}\n` +
+                `Vente: ${vente}`;
+        
+            // Afficher pour validation avant envoi
+            await send(
+                `📋 *FIXTURE GÉNÉRÉE*\n\n${rapportFixture}\n\n` +
+                `──────────────\n` +
+                `Envoie *OUI* pour publier dans Rates&Fixtures ou *NON* pour annuler.`
+            );
+            
+            // Stocker en attente de confirmation
+            setState(jid, { etape: 'confirmation_fixture', rapport_final: rapportFixture });
+            return true;
+        }
+        
+        // Confirmation fixture
+        if (texte.trim().toUpperCase() === 'OUI') {
+            const state = getState(jid);
+            if (state?.etape === 'confirmation_fixture') {
+                const groupeDest = config.groupesDestination['rate_fixture'];
+                await sock.sendMessage(groupeDest.id, { text: state.rapport_final });
+                await send(`✅ Fixture envoyée dans *${groupeDest.nom}*`);
+                resetState(jid);
+                return true;
+            }
+        }
+
         // ── Langage naturel via Agent Intention ──
         await send('🤔 Analyse en cours...', jid);
 
@@ -238,6 +315,76 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         return true;
     };
 
+    // ============ SUIVI RAPPORTS ATTENDUS ============
+        const rapportsAttendus = new Map(); // type → { attenduDepuis, relances }
+        
+        const DELAIS_RELANCE = [15, 30, 60]; // minutes avant chaque relance
+        
+        const verifierRapportsManquants = async () => {
+            const messages = await memoire.getMessagesDepuis(null);
+            const now = new Date();
+            const heure = now.getHours();
+        
+            // Rapports attendus selon l'heure
+            const attendus = [];
+            if (heure >= 5)  attendus.push({ type: 'ouverture',  label: 'Rapport ouverture matin' });
+            if (heure >= 5)  attendus.push({ type: 'fixture',    label: 'Fixtures & taux de change' });
+            if (heure >= 10) attendus.push({ type: 'coffre_matin', label: 'État coffre matin' });
+            if (heure >= 22) attendus.push({ type: 'soir',       label: 'Dernier rapport soir' });
+            if (heure >= 22) attendus.push({ type: 'coffre_soir', label: 'État coffre soir' });
+        
+            const manquants = [];
+        
+            for (const attendu of attendus) {
+                // Vérifier si déjà reçu aujourd'hui
+                const recu = messages.some(m => {
+                    const t = m.texte?.toLowerCase() || '';
+                    switch (attendu.type) {
+                        case 'ouverture':    return t.includes('ouverture du') || t.includes('bonjour team');
+                        case 'fixture':      return t.includes('fixtures sport betting') || t.includes('taux de change');
+                        case 'coffre_matin': return t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14;
+                        case 'soir':         return t.includes('dernier rapport');
+                        case 'coffre_soir':  return t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14;
+                        default: return false;
+                    }
+                });
+        
+                if (!recu) manquants.push(attendu.label);
+            }
+        
+            if (manquants.length > 0) {
+                // Initialiser suivi si pas encore fait
+                for (const attendu of attendus) {
+                    if (!rapportsAttendus.has(attendu.type)) {
+                        rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
+                    }
+                }
+        
+                await send(
+                    `⚠️ *RAPPORTS MANQUANTS*\n\n` +
+                    manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
+                    `\n\n📢 Relance envoyée aux managers.`
+                );
+        
+                // Relancer les managers
+                await relancerManagers(manquants);
+            } else {
+                // Tout reçu — nettoyer le suivi
+                rapportsAttendus.clear();
+            }
+        };
+        
+        const relancerManagers = async (manquants) => {
+            const liste = manquants.map(m => `• ${m}`).join('\n');
+            const msg = 
+                `📢 *RAPPEL — RAPPORTS EN ATTENTE*\n\n` +
+                `Les rapports suivants n'ont pas encore été reçus :\n\n${liste}\n\n` +
+                `Merci de les envoyer dès que possible. ⏰`;
+        
+            // Envoyer dans Synchro Kinkole
+            await sock.sendMessage('120363021280044937@g.us', { text: msg });
+        };
+
     
 
     // ✅ briefAutomatique corrigé
@@ -252,5 +399,11 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         await send(`⏰ *BRIEF AUTOMATIQUE - ${new Date().toLocaleTimeString('fr-FR')}*\n\n${reponse}`);
     };
 
-    return { traiterCommande, briefAutomatique };
+    return { 
+    traiterCommande, 
+    briefAutomatique, 
+    demanderCoffre, 
+    demanderFixture,
+    verifierRapportsManquants  // ✅
+    };
 };
