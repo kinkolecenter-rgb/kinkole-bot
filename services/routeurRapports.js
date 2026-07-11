@@ -1,9 +1,9 @@
 const config = require('../config');
 
-//const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 // const MODEL = 'llama-3.3-70b-versatile';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-
+// const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Modèles de référence
 const MODELE_MATIN = `Bonjour Team
 * Ouverture du [DATE] shop [SHOP] par [MANAGER] [HEURE_OUV]
@@ -47,30 +47,43 @@ Taux de change
 Achat: [ACHAT]
 Vente: [VENTE]`;
 
-async function appelerGemini(systemPrompt, userPrompt) {
-    try {
-        const response = await fetch(`${GEMINI_URL}?key=${config.geminiApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: systemPrompt }] },
-                contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-                generationConfig: {
-                    maxOutputTokens: 200,
-                    temperature: 0.1
-                }
-            })
-        });
-        const data = await response.json();
-        if (data.error) {
-            console.error('❌ Gemini routeur error:', data.error.message);
-            return null;
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+async function appelerIA(systemPrompt, userPrompt) {
+    const modeles = [
+        'meta-llama/llama-3.1-8b-instruct:free',
+        'google/gemma-3-27b-it:free',
+        'mistralai/mistral-7b-instruct:free'
+    ];
+
+    for (const model of modeles) {
+        try {
+            const response = await fetch(OPENROUTER_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${config.openrouterApiKey}`,
+                    'HTTP-Referer': 'https://kinkole-bot.railway.app'
+                },
+                body: JSON.stringify({
+                    model,
+                    max_tokens: 200,
+                    temperature: 0.1,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ]
+                })
+            });
+            const data = await response.json();
+            if (!data.error && data.choices?.[0]?.message?.content) {
+                return data.choices[0].message.content;
+            }
+        } catch (e) {
+            console.log(`⚠️ Erreur ${model}:`, e.message);
         }
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } catch (e) {
-        console.error('❌ Erreur réseau routeur:', e.message);
-        return null;
     }
+    return null;
 }
 
 // Détecte si un message est un rapport et lequel
@@ -113,7 +126,7 @@ IMPORTANT :
 Message :
 ${texte.substring(0, 600)}`;
 
-    const resultat = await appelerGemini(
+    const resultat = await appelerIA(
         'Tu es un détecteur de rapport. Retourne uniquement du JSON valide sans markdown.',
         prompt
     );
@@ -153,7 +166,7 @@ ${texte}
 Si une info est présente même partiellement, ne la mets pas dans manquants.
 Si tout est présent, retourne complet=true et manquants=[].`;
 
-    const resultat = await appelerGemini(
+    const resultat = await appelerIA(
         'Tu es un vérificateur de rapport. Retourne uniquement du JSON valide sans markdown.',
         prompt
     );
