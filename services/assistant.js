@@ -316,75 +316,79 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
     };
 
     // ============ SUIVI RAPPORTS ATTENDUS ============
-        const rapportsAttendus = new Map(); // type → { attenduDepuis, relances }
+     
+    // ============ SUIVI RAPPORTS ATTENDUS ============
+        const rapportsAttendus = new Map();
         
-        const DELAIS_RELANCE = [15, 30, 60]; // minutes avant chaque relance
+        const verifierRapportsManquants = async () => {
+            const now = new Date();
+            const heure = now.getHours();
+            const debutJour = new Date();
+            debutJour.setHours(0, 0, 0, 0);
+            const depuis = debutJour.getTime();
         
-const verifierRapportsManquants = async () => {
-    const now = new Date();
-    const heure = now.getHours();
-    const debutJour = new Date();
-    debutJour.setHours(0, 0, 0, 0);
-    const depuis = debutJour.getTime();
-
-    // Récupérer messages de tous les groupes surveillés + groupes destination
-    const tousMessages = await memoire.getTousMessages(200);
-    
-    // Ajouter messages des groupes destination
-    const msgsGestion  = await memoire.getMessages(config.groupesDestination.gestion_center.id, 50);
-    const msgsSCheck   = await memoire.getMessages(config.groupesDestination.s_check.id, 50);
-    const msgsFixture  = await memoire.getMessages(config.groupesDestination.rate_fixture.id, 50);
-    
-    const tous = [...tousMessages, ...msgsGestion, ...msgsSCheck, ...msgsFixture]
-        .filter(m => m.timestamp >= depuis); // aujourd'hui seulement
-
-    const check = (fn) => tous.some(m => fn(m.texte?.toLowerCase() || '', m));
-
-    const attendus = [];
-    if (heure >= 9)  attendus.push({
-        type: 'ouverture',
-        label: 'Rapport ouverture matin',
-        recu: check(t => t.includes('ouverture du') || t.includes('bonjour team'))
-    });
-    if (heure >= 10) attendus.push({
-        type: 'fixture',
-        label: 'Fixtures & taux de change',
-        recu: check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))
-    });
-    if (heure >= 10) attendus.push({
-        type: 'coffre_matin',
-        label: 'État coffre matin',
-        recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14)
-    });
-    if (heure >= 22) attendus.push({
-        type: 'soir',
-        label: 'Dernier rapport soir',
-        recu: check(t => t.includes('dernier rapport'))
-    });
-    if (heure >= 22) attendus.push({
-        type: 'coffre_soir',
-        label: 'État coffre soir',
-        recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14)
-    });
-
-    const manquants = attendus.filter(a => !a.recu).map(a => a.label);
-
-    if (manquants.length > 0) {
-        for (const attendu of attendus) {
-            if (!rapportsAttendus.has(attendu.type)) {
-                rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
+            // Récupérer messages de tous les groupes surveillés + groupes destination
+            const tousMessages = await memoire.getTousMessages(200);
+            
+            // Ajouter messages des groupes destination pour être sûr de ne rien rater
+            const msgsGestion  = await memoire.getMessages(config.groupesDestination.gestion_center.id, 50);
+            const msgsSCheck   = await memoire.getMessages(config.groupesDestination.s_check.id, 50);
+            const msgsFixture  = await memoire.getMessages(config.groupesDestination.rate_fixture.id, 50);
+            
+            const tous = [...tousMessages, ...msgsGestion, ...msgsSCheck, ...msgsFixture]
+                .filter(m => m.timestamp >= depuis); // aujourd'hui seulement
+        
+            const check = (fn) => tous.some(m => fn(m.texte?.toLowerCase() || '', m));
+        
+            const attendus = [];
+            if (heure >= 9)  attendus.push({
+                type: 'ouverture',
+                label: 'Rapport ouverture matin',
+                recu: check(t => t.includes('ouverture du') || t.includes('bonjour team'))
+            });
+            if (heure >= 10) attendus.push({
+                type: 'fixture',
+                label: 'Fixtures & taux de change',
+                recu: check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))
+            });
+            if (heure >= 10) attendus.push({
+                type: 'coffre_matin',
+                label: 'État coffre matin',
+                recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14)
+            });
+            if (heure >= 22) attendus.push({
+                type: 'soir',
+                label: 'Dernier rapport soir',
+                recu: check(t => t.includes('dernier rapport'))
+            });
+            if (heure >= 22) attendus.push({
+                type: 'coffre_soir',
+                label: 'État coffre soir',
+                recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14)
+            });
+        
+            const manquants = attendus.filter(a => !a.recu).map(a => a.label);
+        
+            if (manquants.length > 0) {
+                for (const attendu of attendus) {
+                    if (!rapportsAttendus.has(attendu.type)) {
+                        rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
+                    }
+                }
+                
+                const alerteMsg = `⚠️ *RAPPORTS MANQUANTS*\n\n` +
+                                  manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
+                                  `\n\n📢 Prière d'envoyer les rapports manquants.`;
+                
+                // ENVOI UNIQUEMENT DANS SYNCHRO KINKOLE
+                await sendVersGroupe('120363021280044937@g.us', alerteMsg);
+                console.log('📢 Relance des rapports envoyée dans Synchro Kinkole.');
+                
+            } else {
+                rapportsAttendus.clear();
+                console.log('✅ Tous les rapports requis sont présents.');
             }
-        }
-        await send(
-            `⚠️ *RAPPORTS MANQUANTS*\n\n` +
-            manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
-            `\n\n📢 Relance envoyée aux managers.`
-        );
-        await relancerManagers(manquants);
-    } else {
-        rapportsAttendus.clear();
-    }
-};
+        };
 
     
 
