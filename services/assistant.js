@@ -317,79 +317,92 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
 
     // ============ SUIVI RAPPORTS ATTENDUS ============
      
-    // ============ SUIVI RAPPORTS ATTENDUS ============
-        const rapportsAttendus = new Map();
-        
-        const verifierRapportsManquants = async () => {
-            const now = new Date();
-            const heure = now.getHours();
-            const debutJour = new Date();
-            debutJour.setHours(0, 0, 0, 0);
-            const depuis = debutJour.getTime();
-        
-            // Récupérer messages de tous les groupes surveillés + groupes destination
-            const tousMessages = await memoire.getTousMessages(200);
-            
-            // Ajouter messages des groupes destination pour être sûr de ne rien rater
-            const msgsGestion  = await memoire.getMessages(config.groupesDestination.gestion_center.id, 50);
-            const msgsSCheck   = await memoire.getMessages(config.groupesDestination.s_check.id, 50);
-            const msgsFixture  = await memoire.getMessages(config.groupesDestination.rate_fixture.id, 50);
-            
-            const tous = [...tousMessages, ...msgsGestion, ...msgsSCheck, ...msgsFixture]
-                .filter(m => m.timestamp >= depuis); // aujourd'hui seulement
-        
-            const check = (fn) => tous.some(m => fn(m.texte?.toLowerCase() || '', m));
-        
-            const attendus = [];
-            if (heure >= 9)  attendus.push({
-                type: 'ouverture',
-                label: 'Rapport ouverture matin',
-                recu: check(t => t.includes('ouverture du') || t.includes('bonjour team'))
-            });
-            if (heure >= 10) attendus.push({
-                type: 'fixture',
-                label: 'Fixtures & taux de change',
-                recu: check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))
-            });
-            if (heure >= 10) attendus.push({
-                type: 'coffre_matin',
-                label: 'État coffre matin',
-                recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() < 14)
-            });
-            if (heure >= 22) attendus.push({
-                type: 'soir',
-                label: 'Dernier rapport soir',
-                recu: check(t => t.includes('dernier rapport'))
-            });
-            if (heure >= 22) attendus.push({
-                type: 'coffre_soir',
-                label: 'État coffre soir',
-                recu: check((t, m) => t.includes('coffre ok') && new Date(m.timestamp).getHours() >= 14)
-            });
-        
-            const manquants = attendus.filter(a => !a.recu).map(a => a.label);
-        
-            if (manquants.length > 0) {
-                for (const attendu of attendus) {
-                    if (!rapportsAttendus.has(attendu.type)) {
-                        rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
-                    }
-                }
-                
-                const alerteMsg = `⚠️ *RAPPORTS MANQUANTS*\n\n` +
-                                  manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
-                                  `\n\n📢 Prière d'envoyer les rapports manquants.`;
-                
-                // ENVOI UNIQUEMENT DANS SYNCHRO KINKOLE
-                await sendVersGroupe('120363021280044937@g.us', alerteMsg);
-                console.log('📢 Relance des rapports envoyée dans Synchro Kinkole.');
-                
-            } else {
-                rapportsAttendus.clear();
-                console.log('✅ Tous les rapports requis sont présents.');
-            }
-        };
+    const verifierRapportsManquants = async () => {
+    const now = new Date();
+    const heure = now.getHours();
+    
+    // 🛑 FILTRE ANTI-SPAM : Pas de relance l'après-midi (entre 14h et 21h) ni tôt le matin (avant 9h)
+    if (heure < 9 || (heure >= 14 && heure < 22)) {
+        console.log(`⏰ Il est ${heure}h, pas de relance de rapports prévue à cette période.`);
+        return;
+    }
 
+    const debutJour = new Date();
+    debutJour.setHours(0, 0, 0, 0);
+    const depuis = debutJour.getTime();
+
+    // Récupérer messages de tous les groupes concernés
+    const tousMessages = await memoire.getTousMessages(200);
+    const msgsGestion  = await memoire.getMessages(config.groupesDestination.gestion_center.id, 50);
+    const msgsSCheck   = await memoire.getMessages(config.groupesDestination.s_check.id, 50);
+    const msgsFixture  = await memoire.getMessages(config.groupesDestination.rate_fixture.id, 50);
+    
+    const tous = [...tousMessages, ...msgsGestion, ...msgsSCheck, ...msgsFixture]
+        .filter(m => m.timestamp >= depuis); // aujourd'hui seulement
+
+    // 🔍 NORMALISATION ROBUSTE : on enlève les espaces multiples, les sauts de ligne et les astérisques
+    const check = (fn) => tous.some(m => {
+        const texteNorm = (m.texte || '').toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+        return fn(texteNorm, m);
+    });
+
+    const attendus = [];
+    
+    // ── RAPPORTS DU MATIN (Relances uniquement entre 9h et 14h) ──
+    if (heure >= 9 && heure < 14) {
+        attendus.push({
+            type: 'ouverture',
+            label: 'Rapport ouverture matin',
+            recu: check(t => t.includes('ouverture du') || t.includes('bonjour team'))
+        });
+    }
+    if (heure >= 10 && heure < 14) {
+        attendus.push({
+            type: 'fixture',
+            label: 'Fixtures & taux de change',
+            recu: check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))
+        });
+        attendus.push({
+            type: 'coffre_matin',
+            label: 'État coffre matin',
+            recu: check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre') || t.includes('état coffre')) && new Date(m.timestamp).getHours() < 15)
+        });
+    }
+
+    // ── RAPPORTS DU SOIR (Relances à partir de 22h) ──
+    if (heure >= 22) {
+        attendus.push({
+            type: 'soir',
+            label: 'Dernier rapport soir',
+            recu: check(t => t.includes('dernier rapport'))
+        });
+        attendus.push({
+            type: 'coffre_soir',
+            label: 'État coffre soir',
+            recu: check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre') || t.includes('état coffre')) && new Date(m.timestamp).getHours() >= 14)
+        });
+    }
+
+    const manquants = attendus.filter(a => !a.recu).map(a => a.label);
+
+    if (manquants.length > 0) {
+        for (const attendu of attendus) {
+            if (!rapportsAttendus.has(attendu.type)) {
+                rapportsAttendus.set(attendu.type, { attenduDepuis: now, relances: 0 });
+            }
+        }
+        
+        const alerteMsg = `⚠️ *RAPPORTS MANQUANTS*\n\n` +
+                          manquants.map((m, i) => `${i+1}. ❌ ${m}`).join('\n') +
+                          `\n\n📢 Prière d'envoyer les rapports manquants.`;
+        
+        await sendVersGroupe('120363021280044937@g.us', alerteMsg);
+        console.log('📢 Relance des rapports manquants envoyée dans Synchro Kinkole.');
+    } else {
+        rapportsAttendus.clear();
+        console.log(`✅ Il est ${heure}h : Tous les rapports requis pour cette période sont présents.`);
+    }
+};
     
 
     // ✅ briefAutomatique corrigé
