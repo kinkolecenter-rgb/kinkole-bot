@@ -316,7 +316,8 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
     };
 
     // ============ SUIVI RAPPORTS ATTENDUS ============
-     
+    const rapportsAttendus = new Map(); // 👈 AJOUTE CETTE LIGNE ICI
+    
     const verifierRapportsManquants = async () => {
     const now = new Date();
     const heure = now.getHours();
