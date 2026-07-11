@@ -6,6 +6,7 @@ module.exports = {
     secondaireNumero: '243897077439', // ✅ ton numéro secondaire
     groqApiKey: process.env.GROQ_API_KEY,
     geminiApiKey: process.env.GEMINI_API_KEY,
+    openrouterApiKey: process.env.OPENROUTER_API_KEY,
     redis: {
         host: process.env.UPSTASH_REDIS_HOST,
         port: Number(process.env.UPSTASH_REDIS_PORT),
