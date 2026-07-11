@@ -42,5 +42,8 @@ module.exports = {
     '265515029283001@lid': { nom: 'Collaborateur 7', role: 'Ass. Manager' }
 },
     heuresBrief: ['10:00', '12:00', '17:00'],
+    heuresBrief:   ['10:00', '12:00', '17:00'],
+    heuresCoffre:  ['10:00', '22:30'],
+    heureFixture:  '05:30',
     collaborateurs: ['Eric', 'Timothée', 'Déborah', 'Trésor']
 };
