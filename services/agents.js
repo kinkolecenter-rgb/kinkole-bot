@@ -86,16 +86,15 @@ async function appelerGroq(systemPrompt, messages, historique = []) {
             },
             body: JSON.stringify({
                 model: MODEL,
-                max_tokens: 1500,
-                temperature: 0.3,
+                max_tokens: 1000,
+                temperature: 0.1, // réduit pour plus de cohérence
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    ...historique,
+                    ...historique,  // ✅ historique avant le nouveau message
                     ...messages
                 ]
             })
         });
-
         const data = await response.json();
         if (data.error) {
             console.error('❌ Groq error:', data.error.message);
@@ -219,7 +218,7 @@ async function agentRecherche(question, messages, historique = []) {
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
-            content: `Messages disponibles :\n\n${contexte}\n\nQuestion : ${question}\n\nRéponds directement et précisément à cette question. Si c'est une question simple, réponds simplement sans format de bilan.`
+            content: `Messages disponibles :\n\n${contexte}\n\nQuestion : ${question}\n\nIMPORTANT : Si la question fait référence à une réponse précédente dans l'historique de conversation, utilise ces informations. Réponds directement et précisément. Si c'est une question simple, réponds simplement sans format de bilan.`
         }],
         historique
     );
