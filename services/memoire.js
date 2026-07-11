@@ -1,7 +1,6 @@
 const config = require('../config');
-
 const CLE_MESSAGES = (groupeJid) => `messages:${groupeJid}`;
-const MAX_MESSAGES = 200; // max par groupe
+const MAX_MESSAGES = 200;
 
 module.exports = function creerMemoire(redis) {
 
@@ -11,13 +10,13 @@ module.exports = function creerMemoire(redis) {
             const data = JSON.stringify(message);
             await redis.lpush(cle, data);
             await redis.ltrim(cle, 0, MAX_MESSAGES - 1);
-            await redis.expire(cle, 60 * 60 * 24 * 7); // 7 jours
+            await redis.expire(cle, 60 * 60 * 24 * 7);
         } catch (e) {
             console.error('❌ Erreur sauvegarde message:', e.message);
         }
     };
 
-    const getMessages = async (groupeJid, limit = 50) => {
+    const getMessages = async (groupeJid, limit = 200) => {
         try {
             const cle = CLE_MESSAGES(groupeJid);
             const data = await redis.lrange(cle, 0, limit - 1);
@@ -28,7 +27,7 @@ module.exports = function creerMemoire(redis) {
         }
     };
 
-    const getTousMessages = async (limit = 50) => {
+    const getTousMessages = async (limit = 200) => {
         try {
             const tous = [];
             for (const jid of config.groupesSurveilles) {
@@ -43,16 +42,29 @@ module.exports = function creerMemoire(redis) {
         }
     };
 
-    const getMessagesDepuis = async (heures = 3) => {
+    const getMessagesDepuis = async (date = null) => {
         try {
-            const depuis = Date.now() - (heures * 60 * 60 * 1000);
+            let depuis, jusqu;
+
+            if (date) {
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
+                depuis = d.getTime();
+                jusqu = d.getTime() + (24 * 60 * 60 * 1000);
+            } else {
+                const minuit = new Date();
+                minuit.setHours(0, 0, 0, 0);
+                depuis = minuit.getTime();
+                jusqu = Date.now();
+            }
+
             const tous = await getTousMessages(200);
-            
-            const numerosManagers = Object.keys(config.managers); // ['243900014909@s.whatsapp.net', ...]
-            
-            return tous.filter(m => 
+            const numerosManagers = Object.keys(config.managers);
+
+            return tous.filter(m =>
                 m.timestamp >= depuis &&
-                numerosManagers.includes(m.expediteurJid) // filtre par JID exact
+                m.timestamp <= jusqu &&
+                numerosManagers.includes(m.expediteurJid)
             );
         } catch (e) {
             return [];
