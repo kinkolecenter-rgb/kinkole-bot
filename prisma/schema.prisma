@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id           Int       @id @default(autoincrement())
+  nom          String    @unique
+  localisation String?  
+  managers     Manager[]
+  rapports     Report[]
+}
+
+model Manager {
+  jid         String    @id
+  nom         String    
+  role        String    @default("Manager")
+  shopId      Int?
+  shop        Shop?     @relation(fields: [shopId], references: [id])
+  rapports    Report[]
+}
+
+model Message {
+  id          String    @id @default(uuid())
+  groupeJid   String
+  senderJid   String
+  texte       String    @db.Text
+  estMedia    Boolean   @default(false)
+  timestamp   DateTime  @default(now())
+  incident    Incident? 
+}
+
+model Report {
+  id          String    @id @default(uuid())
+  type        String
+  contenu     Json
+  complet     Boolean   @default(true)
+  timestamp   DateTime  @default(now())
+  managerJid  String
+  manager     Manager   @relation(fields: [managerJid], references: [jid])
+  shopId      Int?
+  shop        Shop?     @relation(fields: [shopId], references: [id])
+}
+
+model Incident {
+  id          String    @id @default(uuid())
+  type        String
+  priorite    Int
+  description String    @db.Text
+  statut      String    @default("OUVERT")
+  timestamp   DateTime  @default(now())
+  messageId   String    @unique
+  message     Message   @relation(fields: [messageId], references: [id])
+}
