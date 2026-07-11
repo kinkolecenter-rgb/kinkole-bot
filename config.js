@@ -3,7 +3,9 @@ module.exports = {
     monNumero: process.env.MON_NUMERO || '243904246049',
     monLid: process.env.MON_LID || '204685424214253',
     secondaireLid: '138277243904251',
+    secondaireNumero: '243897077439', // ✅ ton numéro secondaire
     groqApiKey: process.env.GROQ_API_KEY,
+    geminiApiKey: process.env.GEMINI_API_KEY,
     redis: {
         host: process.env.UPSTASH_REDIS_HOST,
         port: Number(process.env.UPSTASH_REDIS_PORT),
@@ -31,17 +33,15 @@ module.exports = {
         s_check:        { nom: 'S.check bn',        id: '243900435187-1560795042@g.us' },
         rate_fixture:   { nom: 'Rates&Fixtures',    id: '243890177777-1574181414@g.us' }
     },
-
     managers: {
-    '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
-    '90263603159168@lid':  { nom: 'Collaborateur 2', role: 'Manager' },
-    '42967356150013@lid':  { nom: 'Collaborateur 3', role: 'Ass. Manager' },
-    '265029714768018@lid': { nom: 'Collaborateur 4', role: 'Ass. Manager' },
-    '152059408036054@lid': { nom: 'Collaborateur 5', role: 'Manager' },
-    '169230989307948@lid': { nom: 'Collaborateur 6', role: 'Manager' },
-    '265515029283001@lid': { nom: 'Collaborateur 7', role: 'Ass. Manager' }
-},
-    heuresBrief: ['10:00', '12:00', '17:00'],
+        '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
+        '90263603159168@lid':  { nom: 'Collaborateur 2', role: 'Manager' },
+        '42967356150013@lid':  { nom: 'Collaborateur 3', role: 'Ass. Manager' },
+        '265029714768018@lid': { nom: 'Collaborateur 4', role: 'Ass. Manager' },
+        '152059408036054@lid': { nom: 'Collaborateur 5', role: 'Manager' },
+        '169230989307948@lid': { nom: 'Collaborateur 6', role: 'Manager' },
+        '265515029283001@lid': { nom: 'Collaborateur 7', role: 'Ass. Manager' }
+    },
     heuresBrief:   ['10:00', '12:00', '17:00'],
     heuresCoffre:  ['10:00', '22:30'],
     heureFixture:  '05:30',
