@@ -1,7 +1,8 @@
 const config = require('../config');
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.3-70b-versatile';
+//const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// const MODEL = 'llama-3.3-70b-versatile';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // Modèles de référence
 const MODELE_MATIN = `Bonjour Team
@@ -46,7 +47,7 @@ Taux de change
 Achat: [ACHAT]
 Vente: [VENTE]`;
 
-async function appelerGroq(systemPrompt, userPrompt) {
+async function appelerGemini(systemPrompt, userPrompt) {
     try {
         const response = await fetch(GROQ_URL, {
             method: 'POST',
@@ -112,7 +113,7 @@ IMPORTANT :
 Message :
 ${texte.substring(0, 600)}`;
 
-    const resultat = await appelerGroq(
+    const resultat = await appelerGemini(
         'Tu es un détecteur de rapport. Retourne uniquement du JSON valide sans markdown.',
         prompt
     );
@@ -152,7 +153,7 @@ ${texte}
 Si une info est présente même partiellement, ne la mets pas dans manquants.
 Si tout est présent, retourne complet=true et manquants=[].`;
 
-    const resultat = await appelerGroq(
+    const resultat = await appelerGemini(
         'Tu es un vérificateur de rapport. Retourne uniquement du JSON valide sans markdown.',
         prompt
     );
