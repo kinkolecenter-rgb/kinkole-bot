@@ -8,6 +8,7 @@ const {
     agentRecommandations,
     agentBrief
 } = require('./agents');
+const db = require('./database'); // 👈 AJOUT
 
 module.exports = function creerAssistant(sock, memoire, contexte) {
 
@@ -81,6 +82,27 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
 
     const traiterCommande = async (texte, jid) => {
         const cmd = texte.trim().toUpperCase();
+
+        // ── COMMANDE SECRÈTE DE TEST BASE DE DONNÉES ──
+        if (cmd === 'STATS DB') {
+            await send('🔍 Interrogation de la base de données (Supabase)...', jid);
+            try {
+                const nbMessages = await db.prisma.message.count();
+                const nbReports = await db.prisma.report.count();
+                const nbManagers = await db.prisma.manager.count();
+                
+                const statsMsg = `📊 *STATISTIQUES SUPABASE*\n\n` +
+                                 `• Messages stockés : *${nbMessages}*\n` +
+                                 `• Rapports structurés : *${nbReports}*\n` +
+                                 `• Managers enregistrés : *${nbManagers}*\n\n` +
+                                 `✅ La connexion PostgreSQL est parfaite !`;
+                
+                await send(statsMsg, jid);
+            } catch (e) {
+                await send(`❌ Erreur de lecture DB : ${e.message}`, jid);
+            }
+            return true;
+        }
 
         // ── Commandes rapides sans IA ──
         if (cmd === 'RESET' || cmd === 'EFFACER') {
