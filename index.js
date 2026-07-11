@@ -182,7 +182,26 @@ async function startBot() {
             if (msg.key.fromMe) continue;
 
             const jid = msg.key.remoteJid;
-            const texte = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+            // Remplace la ligne texte dans le bloc groupes surveillés
+            const texte = msg.message?.conversation || 
+                          msg.message?.extendedTextMessage?.text || 
+                          msg.message?.imageMessage?.caption ||      // ✅ légende image
+                          msg.message?.videoMessage?.caption ||      // ✅ légende vidéo
+                          msg.message?.documentMessage?.caption ||   // ✅ légende document
+                          '';
+            
+            // Ajoute un indicateur si c'est un média
+            const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage);
+            
+            await memoire.sauvegarderMessage(jid, {
+                groupeJid: jid,
+                groupeNom: NOMS_GROUPES[jid] || jid,
+                expediteurJid: participantJid,
+                expediteur,
+                texte: estMedia && !texte ? '[Média sans légende]' : texte,
+                estMedia,
+                timestamp: Date.now()
+            });
             if (!texte) continue;
 
             // Messages des groupes surveillés → stocker en mémoire
