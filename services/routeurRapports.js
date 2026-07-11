@@ -49,7 +49,7 @@ Vente: [VENTE]`;
 
 async function appelerGemini(systemPrompt, userPrompt) {
     try {
-        const response = await fetch(GROQ_URL, {
+        const response = await fetch(GEMINI_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
