@@ -79,7 +79,7 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 // ============ APPEL GROQ AVEC HISTORIQUE ============
 async function appelerGemini(systemPrompt, messages, historique = []) {
     try {
-        const response = await fetch(GROQ_URL, {
+        const response = await fetch(GEMINI_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
