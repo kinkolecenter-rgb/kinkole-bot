@@ -232,6 +232,26 @@ async function startBot() {
                     const manager = config.managers[participantJid];
                     const destination = getDestination(detection.type);
                     const groupeDest = config.groupesDestination[destination];
+                    
+                    //----------------------------------
+                    const destination = getDestination(detection.type);
+
+                    if (destination) {
+                        const groupeDest = config.groupesDestination[destination];
+                        const completude = await verifierCompletude(texte, detection.type);
+                    
+                        if (completude.complet) {
+                            await sock.sendMessage(groupeDest.id, { text: texte });
+                            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                                text: `✅ *${detection.type.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
+                            });
+                        } else {
+                            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                                text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}`
+                            });
+                        }
+                    }
+                    // Si destination=null → message stocké en mémoire uniquement, pas de routing
         
                     console.log(`📋 Rapport ${detection.type} détecté de ${manager.nom}`);
         
