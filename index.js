@@ -107,6 +107,23 @@ async function startBot() {
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
 
+            // --- SCRIPT TEMPORAIRE POUR LISTER LES MEMBRES ---
+            const groupeJid = "120363021280044937@g.us";
+            
+            try {
+                const metadata = await sock.groupMetadata(groupeJid);
+                console.log(`\n📋 Liste des membres du groupe : ${metadata.subject}`);
+                
+                for (const participant of metadata.participants) {
+                    const idMembre = participant.id;
+                    const role = participant.admin ? `(Admin)` : `(Membre)`;
+                    console.log(`- ${idMembre} ${role}`);
+                }
+            } catch (erreur) {
+                console.error(`❌ Erreur lors de la récupération des membres :`, erreur);
+            }
+            // -------------------------------------------------
+
             // Pré-charger groupes destination
             setTimeout(async () => {
                 const cibles = Object.values(config.groupesDestination).map(g => g.id);
