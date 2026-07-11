@@ -1,3 +1,21 @@
+// Supprimer les logs Baileys verbeux
+const originalLog = console.log;
+console.log = (...args) => {
+    const msg = args[0]?.toString() || '';
+    if (
+        msg.includes('Closing session') ||
+        msg.includes('Removing old closed') ||
+        msg.includes('SessionEntry') ||
+        msg.includes('_chains') ||
+        msg.includes('registrationId') ||
+        msg.includes('ephemeralKeyPair') ||
+        msg.includes('Buffer') ||
+        msg.includes('baseKey') ||
+        msg.includes('preKeyId') ||
+        msg.includes('chainKey')
+    ) return; // bloquer ces logs
+    originalLog(...args);
+};
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
