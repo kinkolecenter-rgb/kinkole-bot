@@ -248,19 +248,25 @@ async function startBot() {
             // ── ROUTING RAPPORT MANAGER ──
             const estManager = Object.keys(config.managers).includes(participantJid);
         
-            if (estManager && texte.length > 50) {
-                const estProbablementRapport = (
-                    texte.includes('Ouverture du') ||
-                    texte.includes('Bonjour Team') ||
-                    texte.includes('Dernier rapport') ||
-                    texte.includes('Coffre ok') ||
-                    texte.includes('Fixtures sport betting') ||
-                    texte.includes('Détails   connexion') ||
-                    texte.includes('TEAM Composition') ||
-                    texte.includes('Rapport pos') ||
-                    texte.includes('Rapport Reste Caution') ||
-                    texte.includes('Non clôture')
-                );
+            const estProbablementRapport = (
+                texte.includes('Ouverture du') ||
+                texte.includes('Bonjour Team') ||
+                texte.includes('Dernier rapport') ||
+                texte.includes('Coffre ok') ||
+                texte.includes('Fixtures sport betting') ||
+                texte.includes('Détails   connexion') ||  // 3 espaces
+                texte.includes('Détails  connexion') ||   // 2 espaces
+                texte.includes('Détails connexion') ||    // 1 espace
+                texte.includes('connexion 12h') ||
+                texte.includes('connexion 15h') ||
+                texte.includes('connexion 17h') ||
+                texte.includes('ids connecté') ||         // ✅ contenu du message
+                texte.includes('TEAM Composition') ||
+                texte.includes('Rapport pos') ||
+                texte.includes('Rapport Reste Caution') ||
+                texte.includes('État d activités actuel') ||
+                texte.includes('Non clôture')
+            );
         
                 if (estProbablementRapport) {
                     const detection = await detecterTypeRapport(texte);
