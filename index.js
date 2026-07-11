@@ -16,6 +16,13 @@ console.log = (...args) => {
     ) return; // bloquer ces logs
     originalLog(...args);
 };
+if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
+    const participantJid = msg.key.participant || '';
+    const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
+    
+    // Log complet du message
+    console.log(`📨 MSG GROUPE | JID: ${participantJid} | Nom: ${expediteur} | Types: ${Object.keys(msg.message || {}).join(',')}`);
+    
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
