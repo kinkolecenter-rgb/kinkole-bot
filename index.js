@@ -300,10 +300,11 @@ async function startBot() {
         if (!texte) continue;
 
         const expediteur = jid.split('@')[0].split(':')[0];
-        const autorise = [
+       const autorise = [
             String(config.monNumero),
             String(config.monLid),
-            String(config.secondaireLid)
+            String(config.secondaireLid),
+            String(config.secondaireNumero) // ✅
         ].filter(Boolean);
 
         if (!autorise.includes(expediteur)) continue;
