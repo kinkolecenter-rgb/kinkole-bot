@@ -28,6 +28,7 @@ function analyserRapport(texte) {
             materiel_ok: texteNorm.includes('connexion ok') && texteNorm.includes('caisse ok')
         };
     }
+        
     
     // ==========================================
     // 2. DÉTECTION : FIXTURES & TAUX
@@ -61,6 +62,31 @@ function analyserRapport(texte) {
         donnees = {
             statut: 'ok',
             remarques: avecRemarque ? texte.toLowerCase().split('hormis')[1].trim() : 'Aucune'
+        };
+    }
+
+        // ==========================================
+    // 5. DÉTECTION : DERNIER RAPPORT (FERMETURE)
+    // ==========================================
+    else if (texteNorm.includes('dernier rapport') || texteNorm.includes('rapport de fermeture')) {
+        type = 'fermeture';
+        
+        // Extraction des volumes de tickets (en ignorant les points des milliers)
+        const ticketsShop = texteNorm.match(/deux shift.*?:?\s*([\d\.]+)/i);
+        const ticketsPos = texteNorm.match(/agents pos\s*:?\s*([\d\.]+)/i);
+        const ticketsLoto = texteNorm.match(/loto\s*:?\s*([\d\.]+)/i);
+        const instantWin = texteNorm.match(/instant win\s*:?\s*([\d\.]+)/i);
+        
+        // Extraction des stocks (Ram)
+        const ramUtilisee = texteNorm.match(/ram utilis[ée]e?r?\s*:?\s*(\d+)/i);
+        const ramRestante = texteNorm.match(/ram\s*:?\s*(\d+)/i); // Dans la section "restant"
+
+        donnees = {
+            tickets_shop: ticketsShop ? ticketsShop[1] : null,
+            tickets_pos: ticketsPos ? ticketsPos[1] : null,
+            tickets_loto: ticketsLoto ? ticketsLoto[1] : null,
+            tickets_instant_win: instantWin ? instantWin[1] : null,
+            ram_utilisee: ramUtilisee ? parseInt(ramUtilisee[1]) : null
         };
     }
 
