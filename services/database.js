@@ -85,5 +85,6 @@ module.exports = {
     sauvegarderMessage,
     sauvegarderReport,
     getDerniersMessages,
-    disconnect
+    disconnect,
+    supabase // 👈 AJOUTE JUSTE CE MOT ICI !
 };
