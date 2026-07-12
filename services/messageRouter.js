@@ -118,11 +118,49 @@ async function lancerRattrapageAutomatique(sock, db) {
 /**
  * Gère la logique des messages reçus dans les groupes
  */
+/**
+ * Gère la logique des messages reçus dans les groupes
+ */
 async function gererMessageGroupe(sock, msg, jid, memoire) {
     const participantJid = msg.key.participant || msg.key.remoteJid || '';
+    
+    // ==========================================
+    // 🛡️ LE VIGILE HYBRIDE (FILTRE DE SÉCURITÉ)
+    // ==========================================
+    
+    // 1. Liste exclusive des managers autorisés (LID purs)
+    const MANAGERS_AUTORISES = [
+        '42967356150013@lid',  // Timothé Le Noir
+        '265515029283001@lid', // Deborah Kavunga
+        '90263603159168@lid',  // Trésor bk
+        '169230989307948@lid'  // Erick kenzo (Eric pos man)
+    ];
+    const estManagerAutorise = MANAGERS_AUTORISES.includes(participantJid);
+
+    // 2. Passe-droit absolu pour le patron (Toi)
+    const estPatron = (
+        participantJid.includes(config.monNumero) || 
+        participantJid.includes(config.secondaireNumero) || 
+        participantJid === config.monLid || 
+        participantJid === config.secondaireLid ||
+        participantJid === '204685424214253@lid' // Ton LID principal
+    );
+
+    // 3. L'exception "Synchro Kinkole" : Tout message dans ce groupe est accepté
+    const estDansSynchro = (jid === '120363021280044937@g.us');
+
+    // 🛑 LE BLOCAGE : Si le message NE vient PAS de Synchro Kinkole 
+    // ET que l'expéditeur n'est ni un manager autorisé, ni toi -> DEHORS !
+    if (!estDansSynchro && !estManagerAutorise && !estPatron) {
+        return; // Message ignoré silencieusement, il n'ira pas dans la base de données
+    }
+    // ==========================================
+
     const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
 
     const texteBrut = extraireTexte(msg);
+
+    
     const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage || msg.message?.documentWithCaptionMessage);
     const texteStocke = estMedia && !texteBrut ? '[Média sans légende]' : texteBrut;
 
