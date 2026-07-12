@@ -31,7 +31,8 @@ model Message {
   texte       String    @db.Text
   estMedia    Boolean   @default(false)
   timestamp   DateTime  @default(now())
-  incident    Incident? 
+  incident    Incident?
+  est_traite  Boolean  @default(false)
 }
 
 model Report {
