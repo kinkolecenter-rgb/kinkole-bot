@@ -97,7 +97,7 @@ async function getReportsAujourdhui(typeRapport) {
         return await prisma.report.findMany({
             where: {
                 type: typeRapport,
-                cree_le: {
+                timestamp: {
                     gte: debutJournee
                 }
             }
