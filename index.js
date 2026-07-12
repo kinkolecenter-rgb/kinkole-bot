@@ -17,6 +17,7 @@ console.log = (...args) => {
     originalLog(...args);
 };
 const { handleIncomingMessage } = require('./services/messageRouter');
+const { initialiserTourDeControle } = require('./services/tourDeControle');
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
@@ -125,6 +126,7 @@ async function startBot() {
             console.log('✅ WhatsApp connecté !');
 
             lancerRattrapageAutomatique(sock, db);
+            initialiserTourDeControle(sock);
 
             // --- SCRIPT TEMPORAIRE POUR LISTER LES MEMBRES ---
             const groupeJid = "120363021280044937@g.us";
