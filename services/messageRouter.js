@@ -3,6 +3,7 @@ const traiterMessage = require('./reportService');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./routeurRapports');
 const db = require('./database'); // 👈 NOUVEAU : Import de la base de données
 const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
+const cacheOuverture = new Map(); // 🧠 Mémoire pour retenir le nombre de pages du jour
 
 
 // Les groupes (nous les déplacerons dans config.js lors de la Phase 2)
@@ -158,17 +159,83 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 }
 
                 // Routage WhatsApp (inchangé)
-                if (completude.complet) {
-                    await sock.sendMessage(groupeDest.id, { text: texteBrut });
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                        text: `✅ *${detection.type.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
-                    });
-                } else {
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                        text: `⚠️ *${detection.type.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
-                              `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
-                              `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
-                    });
+                const typeLocal = analyseLocale.type !== 'inconnu' ? analyseLocale.type : detection.type;
+
+                // ==========================================
+                // ⚙️ WORKFLOW 1 : OUVERTURE (Matin)
+                // ==========================================
+                if (typeLocal === 'ouverture') {
+                    // 1. On mémorise le nombre de pages (par défaut 8 si non trouvé)
+                    const pages = analyseLocale.donnees?.pages_imprimees || 8;
+                    cacheOuverture.set('pages_kinkole', pages);
+                    
+                    // 2. On transfère le rapport INTACT dans Gestion Center
+                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                    
+                    // 3. Relance automatique dans Synchro si on est avant 10h00
+                    const heureActuelle = new Date().getHours();
+                    if (heureActuelle < 10) {
+                        const demandeFixture = `✅ Ouverture validée.\n\nIl me manque les informations suivantes pour calculer les fixtures :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
+                        
+                        // ID du groupe Synchro Kinkole
+                        await sock.sendMessage('120363021280044937@g.us', { text: demandeFixture });
+                    }
+                    return; // Fin du traitement de l'ouverture
+                }
+
+                // ==========================================
+                // ⚙️ WORKFLOW 2 : CALCUL DES FIXTURES
+                // ==========================================
+                else if (typeLocal === 'fixture') {
+                    const d = analyseLocale.donnees || {};
+                    // On récupère les pages mémorisées (ou 8 par défaut)
+                    const pages = cacheOuverture.get('pages_kinkole') || 8; 
+                    const copiesParAgent = 2;
+                    
+                    // 🧮 LE CALCUL MAGIQUE
+                    const loto = d.loto || 0;
+                    const giga = d.giga || 0;
+                    const felicitation = d.felicitation || 0;
+                    const totalParAgent = (pages * copiesParAgent) + loto + giga + felicitation;
+
+                    // Génération du rapport parfait
+                    const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\n` +
+                                                `Nb. Pages: ${pages}\n` +
+                                                `Nb.Copies par agent: ${copiesParAgent}\n` +
+                                                `Fixture (other)\n` +
+                                                `loto: ${loto}\n` +
+                                                `Giga: ${giga}\n` +
+                                                `Félicitation : ${felicitation}\n` +
+                                                `Total/agt: ${totalParAgent}\n` +
+                                                `----------------\n` +
+                                                `Taux de change\n` +
+                                                `Achat: ${d.taux_achat || '?'}\n` +
+                                                `Vente: ${d.taux_vente || '?'}`;
+
+                    // Publication dans Rate & Fixture
+                    await sock.sendMessage(config.groupesDestination.rate_fixture.id, { text: rapportFixtureFinal });
+                    
+                    // Notification privée pour toi
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Fixture calculée et publiée avec succès !` });
+                    return; // Fin du traitement des fixtures
+                }
+
+                // ==========================================
+                // ⚙️ WORKFLOW CLASSIQUE (Pour les autres rapports)
+                // ==========================================
+                else {
+                    if (completude.complet) {
+                        await sock.sendMessage(groupeDest.id, { text: texteBrut });
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `✅ *${typeLocal.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
+                        });
+                    } else {
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `⚠️ *${typeLocal.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
+                                  `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
+                                  `📍 Reçu dans : *${NOMS_GROUPES[jid]}*`
+                        });
+                    }
                 }
             }
         }
