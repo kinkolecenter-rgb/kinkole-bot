@@ -2,7 +2,8 @@ const config = require('../config');
 const traiterMessage = require('./reportService');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./routeurRapports');
 const db = require('./database'); // 👈 NOUVEAU : Import de la base de données
-const { analyserRapport } = require('./reportEngine'); // 👈 NOUVEAU : Import du moteur
+const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
+
 
 // Les groupes (nous les déplacerons dans config.js lors de la Phase 2)
 const NOMS_GROUPES = {
@@ -191,6 +192,32 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
     ].filter(Boolean);
 
     if (!autorise.includes(expediteur)) return;
+
+    // ==========================================
+    // 👑 FLUX PRIVÉ DU PATRON (LE COFFRE)
+    // ==========================================
+    if (texte.toLowerCase().includes('coffre')) {
+        console.log('🔒 Rapport de coffre brut reçu du patron, formatage en cours...');
+        
+        try {
+            // 1. On formate le texte
+            const rapportFormate = formaterRapportCoffre(texte);
+            
+            // 2. On l'envoie dans S Check
+            await sock.sendMessage(config.groupesDestination.s_check.id, { text: rapportFormate });
+            
+            // 3. On te confirme que c'est fait
+            await sock.sendMessage(jid, { text: `✅ Rapport formaté et publié avec succès dans *S Check* !` });
+            
+            // On arrête l'exécution ici pour ne pas déclencher d'autres commandes
+            return; 
+        } catch (error) {
+            console.error("❌ Erreur lors du formatage du coffre :", error);
+            await sock.sendMessage(jid, { text: `⚠️ Erreur lors du traitement de ton rapport de coffre.` });
+            return;
+        }
+    }
+    // ==========================================
 
     if (texte.trim().toUpperCase() === 'PING') {
         await sock.sendMessage(jid, { text: 'PONG ✅' });
