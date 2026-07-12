@@ -235,6 +235,50 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     return; // Fin du traitement de la fermeture
                 }
 
+                    // ==========================================
+                // ⚙️ WORKFLOW 4 : DÉTAILS CONNEXION (3x / jour)
+                // ==========================================
+                else if (typeLocal === 'details_connexion') {
+                    // Transfert direct et intact dans Gestion Center
+                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                    
+                    // Confirmation silencieuse en privé
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                        text: `✅ *DÉTAILS CONNEXION* de *${manager.nom}* transféré dans *Gestion Center*.` 
+                    });
+                    
+                    return; // Fin du traitement
+                }
+
+                    // ==========================================
+                // ⚙️ WORKFLOW 5 : INCIDENTS & NON-CLÔTURÉS
+                // ==========================================
+                else if (typeLocal === 'incident_cloture') {
+                    // On extrait les IDs à 6 chiffres détectés par le reportEngine
+                    const ids = analyseLocale.donnees?.ids_non_clotures || [];
+                    
+                    // ID du groupe "disparu, viré & no cloturé"
+                    const groupeIncidents = '243900435187-1564716535@g.us'; 
+                    
+                    // On transfère le message original
+                    await sock.sendMessage(groupeIncidents, { text: texteBrut });
+                    
+                    if (ids.length > 0) {
+                        // On mémorise les IDs globalement pour le rappel de demain matin
+                        global.idsNonCloturesHier = ids;
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                            text: `⚠️ *RAPPORT NON CLÔTURÉ* transféré. Les IDs *${ids.join(', ')}* ont été mis en mémoire pour le suivi de demain matin.` 
+                        });
+                    } else {
+                        // Cas où le manager a dit "Tout le monde a clôturé" ou "Rien à signaler"
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                            text: `✅ Rapport des clôtures validé : Rien à signaler.` 
+                        });
+                    }
+                    
+                    return; // Fin du traitement
+                }
+
                 // ==========================================
                 // ⚙️ WORKFLOW CLASSIQUE (Pour les autres rapports)
                 // ==========================================
