@@ -220,6 +220,21 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     return; // Fin du traitement des fixtures
                 }
 
+                    // ==========================================
+                // ⚙️ WORKFLOW 3 : FERMETURE (Dernier rapport)
+                // ==========================================
+                else if (typeLocal === 'fermeture') {
+                    // On transfère UNIQUEMENT LE TEXTE dans Gestion Center
+                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                    
+                    // On t'envoie une petite confirmation en privé
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                        text: `✅ *DERNIER RAPPORT* de *${manager.nom}* validé et transféré dans *Gestion Center*.` 
+                    });
+                    
+                    return; // Fin du traitement de la fermeture
+                }
+
                 // ==========================================
                 // ⚙️ WORKFLOW CLASSIQUE (Pour les autres rapports)
                 // ==========================================
