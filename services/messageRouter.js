@@ -71,70 +71,54 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
 }
 
 // ==========================================================
-// 🛡️ BOUCLE DE SÉCURITÉ : RATTRAPAGE AUTOMATIQUE
+// 🛡️ BOUCLE DE SÉCURITÉ : RATTRAPAGE AUTOMATIQUE (PRISMA)
 // ==========================================================
 async function lancerRattrapageAutomatique(sock, db) {
-    // 15 minutes en millisecondes = 15 * 60 * 1000
     setInterval(async () => {
-        console.log("🔄 Scan de sécurité : Vérification des rapports en attente dans Supabase...");
+        console.log("🔄 Scan de sécurité : Vérification des rapports en attente...");
         
         try {
-            const aujourdHui = new Date().toISOString().split('T')[0];
-            
-            // 1. Chercher les messages non traités du jour
-            // ⚠️ Remplace 'ta_table_messages' par le vrai nom de ta table Supabase
-            const { data: messagesRata, error } = await db.supabase
-                .from('Message') 
-                .select('*')
-                .eq('est_traite', false)
-                .gte('created_at', aujourdHui); // Assure-toi que le nom de ta colonne date est correct
+            // 1. On demande à Prisma les messages ignorés
+            const messagesRata = await db.getMessagesNonTraites();
 
-            if (error || !messagesRata || messagesRata.length === 0) {
-                return; // Rien à rattraper, tout est clean !
+            if (!messagesRata || messagesRata.length === 0) {
+                return; // Rien à rattraper
             }
 
             console.log(`⚠️ ALERTE : ${messagesRata.length} rapport(s) ignoré(s) détecté(s). Rattrapage en cours...`);
 
-            // 2. On traite chaque message oublié
+            // 2. On traite chaque message
             for (const msg of messagesRata) {
-                const texteBrut = msg.texte; // La colonne contenant le texte brut
+                if (!msg.texte) continue;
                 
-                // On utilise ton reportEngine pour comprendre ce que c'est
                 const { analyserRapport } = require('./reportEngine'); 
-                const analyse = analyserRapport(texteBrut);
+                const analyse = analyserRapport(msg.texte);
                 const typeLocal = analyse.type;
 
-                // ⚙️ WORKFLOW 1 : OUVERTURE
                 if (typeLocal === 'ouverture') {
-                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
-                    const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations suivantes pour calculer les fixtures :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
+                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: msg.texte });
+                    const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
                     await sock.sendMessage('120363021280044937@g.us', { text: demandeFixture });
                 }
-                // ⚙️ WORKFLOW 3 & 4 : FERMETURE & DÉTAILS CONNEXION
                 else if (typeLocal === 'fermeture' || typeLocal === 'details_connexion') {
-                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                    await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: msg.texte });
                 }
-                // ⚙️ WORKFLOW 5 : INCIDENTS
                 else if (typeLocal === 'incident_cloture') {
                     const ids = analyse.donnees?.ids_non_clotures || [];
-                    await sock.sendMessage('243900435187-1564716535@g.us', { text: texteBrut });
+                    await sock.sendMessage('243900435187-1564716535@g.us', { text: msg.texte });
                     if (ids.length > 0) global.idsNonCloturesHier = ids;
                 }
 
-                // 3. On marque le message comme "Traité" pour ne plus jamais l'envoyer en double
-                await db.supabase
-                    .from('ta_table_messages')
-                    .update({ est_traite: true })
-                    .eq('id', msg.id);
+                // 3. On demande à Prisma de marquer le message comme traité
+                await db.marquerMessageTraite(msg.id);
             }
             
             console.log("✅ Rattrapage de sécurité terminé avec succès !");
         } catch (err) {
             console.error("❌ Erreur pendant le rattrapage de sécurité :", err);
         }
-    }, 15 * 60 * 1000); // Exécution toutes les 15 minutes
+    }, 15 * 60 * 1000); 
 }
-
 /**
  * Gère la logique des messages reçus dans les groupes
  */
