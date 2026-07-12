@@ -379,6 +379,19 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         if (!check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() < 15)) {
             manquantsCoffre.push('État coffre matin');
         }
+        // 🔥 SUIVI DES NON-CLÔTURÉS DE LA VEILLE (Se déclenche vers 10h)
+        if (heure === 10) {
+            // (On lira le cache du routeur qu'on va créer juste après)
+            const idsHier = global.idsNonCloturesHier || []; 
+            if (idsHier.length > 0) {
+                const rappelIncidents = `⚠️ *SUIVI DES NON-CLÔTURÉS D'HIER*\n\n` +
+                                        `Les IDs suivants n'avaient pas clôturé hier soir : *${idsHier.join(', ')}*.\n\n` +
+                                        `📢 Le problème est-il résolu ce matin ? Merci de confirmer.`;
+                
+                await sendVersGroupe('243900435187-1564716535@g.us', rappelIncidents); // Groupe Disparu/Viré
+                global.idsNonCloturesHier = []; // On vide la liste après avoir demandé
+            }
+        }
     }
 
     // ── RAPPORTS DU SOIR (Relances entre 21h et 01h du matin) ──
@@ -388,6 +401,12 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         }
         if (!check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() >= 14)) {
             manquantsCoffre.push('État coffre soir');
+        }
+        // 🔥 DEMANDE DE L'ÉTAT DES CLÔTURES (À 23h précisément)
+        if (heure === 23) {
+            if (!check(t => t.includes('non clôturé') || t.includes('non cloture') || t.includes('rien à signaler'))) {
+                manquantsManagers.push("État des clôtures (Si tout le monde a clôturé : envoyer 'Rien à signaler', sinon lister les IDs et montants)");
+            }
         }
     }
 
