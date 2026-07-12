@@ -4,7 +4,6 @@
  */
 
 function analyserRapport(texte) {
-    // Normalisation du texte pour faciliter la recherche
     const texteNorm = texte.toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
     
     let type = 'inconnu';
@@ -16,16 +15,16 @@ function analyserRapport(texte) {
     if (texteNorm.includes('ouverture du') || texteNorm.includes('bonjour team')) {
         type = 'ouverture';
         
-        // Extraction via Regex
         const matchHeure = texteNorm.match(/(\d{1,2}[h:]\d{2})/);
         const matchManager = texteNorm.match(/mgr\s+([a-z]+)/i);
         const matchCaissieres = texteNorm.match(/caissi[èe]re\s+(\d+)\/(\d+)/i);
+        const matchPages = texteNorm.match(/pages?\s*:\s*(\d+)/i); // 👈 NOUVEAU : Extraction des pages
 
         donnees = {
             heure_detectee: matchHeure ? matchHeure[1] : null,
             manager_detecte: matchManager ? matchManager[1] : null,
             caissieres_presentes: matchCaissieres ? `${matchCaissieres[1]}/${matchCaissieres[2]}` : null,
-            // Vérification simple de complétude
+            pages_imprimees: matchPages ? parseInt(matchPages[1]) : null, // 👈 Les pages sont stockées ici
             materiel_ok: texteNorm.includes('connexion ok') && texteNorm.includes('caisse ok')
         };
     }
@@ -39,11 +38,15 @@ function analyserRapport(texte) {
         const achat = texteNorm.match(/achat\s*:?\s*(\d+)/);
         const vente = texteNorm.match(/vente\s*:?\s*(\d+)/);
         const loto = texteNorm.match(/loto\s*:?\s*(\d+)/);
+        const giga = texteNorm.match(/giga\s*:?\s*(\d+)/);
+        const felicitation = texteNorm.match(/f[ée]licitations?\s*:?\s*(\d+)/);
 
         donnees = {
             taux_achat: achat ? parseInt(achat[1]) : null,
             taux_vente: vente ? parseInt(vente[1]) : null,
-            loto_pages: loto ? parseInt(loto[1]) : 0
+            loto: loto ? parseInt(loto[1]) : 0,
+            giga: giga ? parseInt(giga[1]) : 0,
+            felicitation: felicitation ? parseInt(felicitation[1]) : 0
         };
     }
     
