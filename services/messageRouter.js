@@ -279,6 +279,37 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     return; // Fin du traitement
                 }
 
+                    // ==========================================
+                // ⚙️ WORKFLOW 6 : RÉSOLUTION DES NON-CLÔTURÉS
+                // ==========================================
+                // On vérifie s'il y a des IDs en attente et si le message parle de résolution
+                if (global.idsNonCloturesHier && global.idsNonCloturesHier.length > 0) {
+                    if (texteNormalise.includes('resolu') || 
+                        texteNormalise.includes('résolu') || 
+                        texteNormalise === 'ok' || 
+                        texteNormalise.includes('cloture ok') ||
+                        texteNormalise.includes('tout est ok')) {
+                        
+                        const idsConcernes = global.idsNonCloturesHier.join(', ');
+                        const groupeIncidents = '243900435187-1564716535@g.us';
+                        
+                        const msgResolution = `✅ *INCIDENT RÉSOLU*\n\nLe problème de non-clôture pour les IDs *${idsConcernes}* a été signalé comme résolu par ${manager.nom}.`;
+                        
+                        // 1. Annonce dans le groupe des incidents
+                        await sock.sendMessage(groupeIncidents, { text: msgResolution });
+                        
+                        // 2. Notification privée pour toi
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                            text: `✅ Suivi terminé : Le problème des IDs *${idsConcernes}* est résolu.` 
+                        });
+                        
+                        // 3. On vide la mémoire (le dossier est clos !)
+                        global.idsNonCloturesHier = [];
+                        
+                        return; // Fin du traitement
+                    }
+                }
+
                 // ==========================================
                 // ⚙️ WORKFLOW CLASSIQUE (Pour les autres rapports)
                 // ==========================================
