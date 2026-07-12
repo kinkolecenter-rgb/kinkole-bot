@@ -467,6 +467,7 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
 }
 
 module.exports = {
+    handleIncomingMessage,        // 👈 C'est lui qu'il manquait !
     gererMessageGroupe,
-    lancerRattrapageAutomatique // <--- Ajout ici
+    lancerRattrapageAutomatique
 };
