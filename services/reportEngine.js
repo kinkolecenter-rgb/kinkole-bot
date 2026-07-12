@@ -18,33 +18,34 @@ function analyserRapport(texte) {
         const matchHeure = texteNorm.match(/(\d{1,2}[h:]\d{2})/);
         const matchManager = texteNorm.match(/mgr\s+([a-z]+)/i);
         const matchCaissieres = texteNorm.match(/caissi[èe]re\s+(\d+)\/(\d+)/i);
-        const matchPages = texteNorm.match(/pages?\s*:\s*(\d+)/i); // 👈 NOUVEAU : Extraction des pages
+        const matchPages = texteNorm.match(/pages?\s*:\s*(\d+)/i);
 
         donnees = {
             heure_detectee: matchHeure ? matchHeure[1] : null,
             manager_detecte: matchManager ? matchManager[1] : null,
             caissieres_presentes: matchCaissieres ? `${matchCaissieres[1]}/${matchCaissieres[2]}` : null,
-            pages_imprimees: matchPages ? parseInt(matchPages[1]) : null, // 👈 Les pages sont stockées ici
+            pages_imprimees: matchPages ? parseInt(matchPages[1]) : null,
             materiel_ok: texteNorm.includes('connexion ok') && texteNorm.includes('caisse ok')
         };
     }
         
-    
     // ==========================================
     // 2. DÉTECTION : FIXTURES & TAUX
     // ==========================================
-    else if (texteNorm.includes('fixtures sport') || texteNorm.includes('taux de change')) {
+    else if (texteNorm.includes('fixtures sport') || texteNorm.includes('taux de change') || texteNorm.includes('taux d\'échange') || texteNorm.includes('taux') || texteNorm.includes('achat')) {
         type = 'fixture';
         
-        const achat = texteNorm.match(/achat\s*:?\s*(\d+)/);
-        const vente = texteNorm.match(/vente\s*:?\s*(\d+)/);
+        // CORRECTION : On accepte les points et les virgules dans les chiffres
+        const achat = texteNorm.match(/achat\s*:?\s*([\d\.,]+)/);
+        const vente = texteNorm.match(/vente\s*:?\s*([\d\.,]+)/);
         const loto = texteNorm.match(/loto\s*:?\s*(\d+)/);
         const giga = texteNorm.match(/giga\s*:?\s*(\d+)/);
         const felicitation = texteNorm.match(/f[ée]licitations?\s*:?\s*(\d+)/);
 
         donnees = {
-            taux_achat: achat ? parseInt(achat[1]) : null,
-            taux_vente: vente ? parseInt(vente[1]) : null,
+            // Nettoyage : on enlève les points/virgules avant de transformer en nombre
+            taux_achat: achat ? parseInt(achat[1].replace(/[\.,]/g, '')) : null,
+            taux_vente: vente ? parseInt(vente[1].replace(/[\.,]/g, '')) : null,
             loto: loto ? parseInt(loto[1]) : 0,
             giga: giga ? parseInt(giga[1]) : 0,
             felicitation: felicitation ? parseInt(felicitation[1]) : 0
@@ -56,30 +57,36 @@ function analyserRapport(texte) {
     // ==========================================
     else if (texteNorm.includes('coffre ok') || texteNorm.includes('etat coffre') || texteNorm.includes('état coffre')) {
         type = 'coffre';
-        
         const avecRemarque = texteNorm.includes('hormis');
-        
         donnees = {
             statut: 'ok',
             remarques: avecRemarque ? texte.toLowerCase().split('hormis')[1].trim() : 'Aucune'
         };
     }
 
-        // ==========================================
+    // ==========================================
+    // 4. DÉTECTION : NON CLÔTURE / INCIDENT
+    // ==========================================
+    else if (texteNorm.includes('non clôturé') || texteNorm.includes('non cloture')) {
+        type = 'incident_cloture';
+        const ids = texteNorm.match(/\b\d{6}\b/g) || [];
+        donnees = {
+            ids_non_clotures: ids,
+            nombre: ids.length
+        };
+    }
+
+    // ==========================================
     // 5. DÉTECTION : DERNIER RAPPORT (FERMETURE)
     // ==========================================
     else if (texteNorm.includes('dernier rapport') || texteNorm.includes('rapport de fermeture')) {
         type = 'fermeture';
         
-        // Extraction des volumes de tickets (en ignorant les points des milliers)
         const ticketsShop = texteNorm.match(/deux shift.*?:?\s*([\d\.]+)/i);
         const ticketsPos = texteNorm.match(/agents pos\s*:?\s*([\d\.]+)/i);
         const ticketsLoto = texteNorm.match(/loto\s*:?\s*([\d\.]+)/i);
         const instantWin = texteNorm.match(/instant win\s*:?\s*([\d\.]+)/i);
-        
-        // Extraction des stocks (Ram)
         const ramUtilisee = texteNorm.match(/ram utilis[ée]e?r?\s*:?\s*(\d+)/i);
-        const ramRestante = texteNorm.match(/ram\s*:?\s*(\d+)/i); // Dans la section "restant"
 
         donnees = {
             tickets_shop: ticketsShop ? ticketsShop[1] : null,
@@ -91,18 +98,14 @@ function analyserRapport(texte) {
     }
 
     // ==========================================
-    // 4. DÉTECTION : NON CLÔTURE / INCIDENT
+    // 6. DÉTECTION : DÉTAILS CONNEXION
     // ==========================================
-    else if (texteNorm.includes('non clôturé') || texteNorm.includes('non cloture')) {
-        type = 'incident_cloture';
-        
-        // On cherche des séries de chiffres (les IDs des agents)
-        const ids = texteNorm.match(/\b\d{6}\b/g) || [];
-        
-        donnees = {
-            ids_non_clotures: ids,
-            nombre: ids.length
-        };
+    // CORRECTION : Remis à la bonne place, dans la fonction d'analyse !
+    else if (texteNorm.includes('détails connexion') || texteNorm.includes('details connexion') || 
+             texteNorm.includes('connexion 12h') || texteNorm.includes('connexion 15h') || 
+             texteNorm.includes('connexion 17h') || texteNorm.includes('ids connect')) {
+        type = 'details_connexion';
+        donnees = {};
     }
 
     return {
@@ -111,6 +114,7 @@ function analyserRapport(texte) {
         donnees: donnees
     };
 }
+
 /**
  * Formate un rapport de coffre brut en un modèle propre et standardisé
  */
@@ -122,13 +126,10 @@ function formaterRapportCoffre(texteBrut) {
     let ecarts = [];
     let usdStatus = null;
 
-    // 1. Détection des exceptions (après "hormis", "moins", etc.)
     if (txt.includes('collect')) exceptions.push('Collecte');
     if (txt.includes('retenu')) exceptions.push('Retenues');
     if (txt.includes('salaire')) exceptions.push('Salaires');
 
-    // 2. Détection des écarts (Surplus ou Reliquat)
-    // Cette Regex capture le mot "surplus" ou "reliquat" suivi d'un montant (ex: "surplus de 10.300fc")
     const matchEcart = txt.match(/(surplus|reliquat)[\s\S]*?(\d+[\.\,]*\d*\s*(cdf|fc)?)/gi);
     if (matchEcart) {
         statut = "À VÉRIFIER ⚠️";
@@ -138,7 +139,6 @@ function formaterRapportCoffre(texteBrut) {
         ecarts.push("Vérification BackOffice requise");
     }
 
-    // 3. Détection USD (Spécifique au soir)
     if (txt.includes('usd')) {
         if (txt.includes('update') || txt.includes('adapted') || txt.includes('updated')) {
             usdStatus = "Updated ✅";
@@ -147,7 +147,6 @@ function formaterRapportCoffre(texteBrut) {
         }
     }
 
-    // 4. Construction du message de sortie
     let header = usdStatus ? "🔒 *RAPPORT COFFRE DU SOIR*" : "🔒 *RAPPORT COFFRE DU MATIN*";
     let msg = `${header}\n\n• *Statut* : ${statut}\n`;
     
@@ -159,16 +158,6 @@ function formaterRapportCoffre(texteBrut) {
 
     if (usdStatus) {
         msg += `• *USD* : ${usdStatus}\n`;
-    }
-
-    // ==========================================
-    // 5. DÉTECTION : DÉTAILS CONNEXION
-    // ==========================================
-    else if (texteNorm.includes('détails connexion') || texteNorm.includes('details connexion') || 
-             texteNorm.includes('connexion 12h') || texteNorm.includes('connexion 15h') || 
-             texteNorm.includes('connexion 17h') || texteNorm.includes('ids connect')) {
-        type = 'details_connexion';
-        donnees = {}; // Pas besoin d'extraire de données complexes pour le moment, on veut juste le transférer
     }
 
     return msg;
