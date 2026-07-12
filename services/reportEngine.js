@@ -161,6 +161,16 @@ function formaterRapportCoffre(texteBrut) {
         msg += `• *USD* : ${usdStatus}\n`;
     }
 
+    // ==========================================
+    // 5. DÉTECTION : DÉTAILS CONNEXION
+    // ==========================================
+    else if (texteNorm.includes('détails connexion') || texteNorm.includes('details connexion') || 
+             texteNorm.includes('connexion 12h') || texteNorm.includes('connexion 15h') || 
+             texteNorm.includes('connexion 17h') || texteNorm.includes('ids connect')) {
+        type = 'details_connexion';
+        donnees = {}; // Pas besoin d'extraire de données complexes pour le moment, on veut juste le transférer
+    }
+
     return msg;
 }
 
