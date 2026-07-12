@@ -177,40 +177,41 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         texteNormalise.includes('non clôture')
     );
 
-    if (estProbablementRapport) {
-        // L'ancien routeur pour déterminer le groupe de destination
-        const detection = await detecterTypeRapport(texteBrut);
+if (estProbablementRapport) {
         
-        // 👈 NOUVEAU : Le moteur local extrait les données structurées
+        // 1. LE MOTEUR LOCAL EN PREMIER (Instantané et 100% hors-ligne)
         const analyseLocale = analyserRapport(texteBrut); 
+        let typeLocal = analyseLocale.type;
+        let iaType = "Non consultée";
         
-        console.log(`🔍 Détection IA: ${detection.type} | Extraction Locale: ${analyseLocale.type}`);
+        // 2. IA EN SECOURS (Uniquement si le moteur local ne comprend pas)
+        if (typeLocal === 'inconnu') {
+            try {
+                const detection = await detecterTypeRapport(texteBrut);
+                iaType = detection.type || 'inconnu';
+                typeLocal = iaType;
+            } catch (e) {
+                console.log("⚠️ Appel IA ignoré (API indisponible)");
+            }
+        }
+        
+        console.log(`🔍 Local: ${analyseLocale.type} | IA: ${iaType} | Final: ${typeLocal}`);
 
-        // ✅ NOUVELLE CONDITION : On valide si SOIT le moteur local, SOIT l'IA trouve le rapport !
-        if (analyseLocale.type !== 'inconnu' || (detection.est_rapport && detection.type !== 'inconnu')) {
+        // 3. DÉBUT DU ROUTAGE
+        if (typeLocal !== 'inconnu') {
             const manager = config.managers[participantJid] || { nom: expediteur };
-            const destination = getDestination(detection.type);
 
-            if (destination) {
-                const groupeDest = config.groupesDestination[destination];
-                const completude = await verifierCompletude(texteBrut, detection.type);
+            // 💾 Sauvegarde dans la base de données
+            try {
+                await db.sauvegarderReport(typeLocal, analyseLocale.donnees || {}, participantJid, true, null);
+                console.log(`✅ Rapport structuré (${typeLocal}) sauvegardé dans la base !`);
+            } catch (e) {
+                console.error('⚠️ Erreur écriture DB:', e.message);
+            }
 
-                // 💾 SAUVEGARDE POSTGRESQL DU RAPPORT STRUCTURÉ
-                try {
-                    await db.sauvegarderReport(
-                        analyseLocale.type !== 'inconnu' ? analyseLocale.type : detection.type,
-                        analyseLocale.donnees || {},
-                        participantJid,
-                        completude.complet,
-                        null // Le shopId sera lié dynamiquement plus tard
-                    );
-                    console.log('✅ Rapport structuré sauvegardé dans Supabase !');
-                } catch (e) {
-                    console.error('⚠️ Erreur écriture Report Supabase:', e.message);
-                }
-
-                // Routage WhatsApp (inchangé)
-                const typeLocal = analyseLocale.type !== 'inconnu' ? analyseLocale.type : detection.type;
+            // ==========================================
+            // ⚙️ TES WORKFLOWS COMMENCENT ICI
+            // ==========================================
 
                 // ==========================================
                 // ⚙️ WORKFLOW 1 : OUVERTURE (Matin)
