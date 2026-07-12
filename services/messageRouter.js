@@ -196,6 +196,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     }
 
     // ── DÉTECTION ROBUSTE DE RAPPORTS ──
+    // ── DÉTECTION ROBUSTE DE RAPPORTS ──
     const estProbablementRapport = (
         texteNormalise.includes('ouverture du') ||
         texteNormalise.includes('bonjour team') ||
@@ -213,10 +214,17 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         texteNormalise.includes('état d activités') ||
         texteNormalise.includes('etat d activites') ||
         texteNormalise.includes('etat materiel') ||
-        texteNormalise.includes('non clôture') ||
         texteNormalise.includes('taux de change') ||
         texteNormalise.includes('taux') ||
-        texteNormalise.includes('achat')
+        texteNormalise.includes('achat') ||
+        // 👇 LES NOUVEAUX MOTS CLÉS POUR LES INCIDENTS
+        texteNormalise.includes('non clôture') ||
+        texteNormalise.includes('non cloture') ||
+        texteNormalise.includes("n'a pas clôturé") ||
+        texteNormalise.includes("n'a pas cloture") ||
+        texteNormalise.includes("n'ont pas clôturer") ||
+        texteNormalise.includes("n'ont pas cloture") ||
+        texteNormalise.includes("pas cloturer")
     );
 
     if (estProbablementRapport) {
