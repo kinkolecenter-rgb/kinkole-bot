@@ -1,14 +1,11 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-/**
- * Enregistre ou met à jour un manager dans la base de données.
- */
 async function upsertManager(jid, nom, role = 'Manager') {
     try {
         return await prisma.manager.upsert({
             where: { jid: jid },
-            update: { nom: nom }, // Met à jour le nom si déjà existant
+            update: { nom: nom },
             create: { jid: jid, nom: nom, role: role }
         });
     } catch (error) {
@@ -16,9 +13,6 @@ async function upsertManager(jid, nom, role = 'Manager') {
     }
 }
 
-/**
- * Sauvegarde un message brut entrant.
- */
 async function sauvegarderMessage(groupeJid, senderJid, texte, estMedia = false) {
     try {
         return await prisma.message.create({
@@ -27,6 +21,7 @@ async function sauvegarderMessage(groupeJid, senderJid, texte, estMedia = false)
                 senderJid,
                 texte,
                 estMedia
+                // est_traite est à "false" par défaut via le schema
             }
         });
     } catch (error) {
@@ -34,31 +29,17 @@ async function sauvegarderMessage(groupeJid, senderJid, texte, estMedia = false)
     }
 }
 
-/**
- * Sauvegarde un rapport structuré.
- */
 async function sauvegarderReport(type, contenu, managerJid, complet = true, shopId = null) {
     try {
-        // S'assurer que le manager existe avant de lier le rapport
         await upsertManager(managerJid, 'Manager Inconnu');
-
         return await prisma.report.create({
-            data: {
-                type,
-                contenu, // Objet JSON (ex: { heure: "08:00", caisse: 500 })
-                complet,
-                managerJid,
-                shopId
-            }
+            data: { type, contenu, complet, managerJid, shopId }
         });
     } catch (error) {
         console.error('❌ Erreur DB (sauvegarderReport):', error.message);
     }
 }
 
-/**
- * Récupère les derniers messages d'un groupe spécifique.
- */
 async function getDerniersMessages(groupeJid, limite = 50) {
     try {
         return await prisma.message.findMany({
@@ -72,9 +53,38 @@ async function getDerniersMessages(groupeJid, limite = 50) {
     }
 }
 
-/**
- * Ferme proprement la connexion à la base de données.
- */
+// ==========================================
+// 🔥 NOUVELLES FONCTIONS POUR LE RATTRAPAGE
+// ==========================================
+
+async function getMessagesNonTraites() {
+    try {
+        const debutJournee = new Date();
+        debutJournee.setHours(0, 0, 0, 0); // On prend depuis minuit aujourd'hui
+
+        return await prisma.message.findMany({
+            where: {
+                est_traite: false,
+                timestamp: { gte: debutJournee } 
+            }
+        });
+    } catch (error) {
+        console.error('❌ Erreur DB (getMessagesNonTraites):', error.message);
+        return [];
+    }
+}
+
+async function marquerMessageTraite(idMessage) {
+    try {
+        return await prisma.message.update({
+            where: { id: idMessage },
+            data: { est_traite: true }
+        });
+    } catch (error) {
+        console.error('❌ Erreur DB (marquerMessageTraite):', error.message);
+    }
+}
+
 async function disconnect() {
     await prisma.$disconnect();
 }
@@ -85,6 +95,7 @@ module.exports = {
     sauvegarderMessage,
     sauvegarderReport,
     getDerniersMessages,
-    disconnect,
-    supabase // 👈 AJOUTE JUSTE CE MOT ICI !
+    getMessagesNonTraites, // 👈 Ajouté
+    marquerMessageTraite,  // 👈 Ajouté
+    disconnect
 };
