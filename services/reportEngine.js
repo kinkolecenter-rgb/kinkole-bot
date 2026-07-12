@@ -35,7 +35,6 @@ function analyserRapport(texte) {
     else if (texteNorm.includes('fixtures sport') || texteNorm.includes('taux de change') || texteNorm.includes('taux d\'échange') || texteNorm.includes('taux') || texteNorm.includes('achat')) {
         type = 'fixture';
         
-        // CORRECTION : On accepte les points et les virgules dans les chiffres
         const achat = texteNorm.match(/achat\s*:?\s*([\d\.,]+)/);
         const vente = texteNorm.match(/vente\s*:?\s*([\d\.,]+)/);
         const loto = texteNorm.match(/loto\s*:?\s*(\d+)/);
@@ -43,7 +42,6 @@ function analyserRapport(texte) {
         const felicitation = texteNorm.match(/f[ée]licitations?\s*:?\s*(\d+)/);
 
         donnees = {
-            // Nettoyage : on enlève les points/virgules avant de transformer en nombre
             taux_achat: achat ? parseInt(achat[1].replace(/[\.,]/g, '')) : null,
             taux_vente: vente ? parseInt(vente[1].replace(/[\.,]/g, '')) : null,
             loto: loto ? parseInt(loto[1]) : 0,
@@ -100,7 +98,6 @@ function analyserRapport(texte) {
     // ==========================================
     // 6. DÉTECTION : DÉTAILS CONNEXION
     // ==========================================
-    // CORRECTION : Remis à la bonne place, dans la fonction d'analyse !
     else if (texteNorm.includes('détails connexion') || texteNorm.includes('details connexion') || 
              texteNorm.includes('connexion 12h') || texteNorm.includes('connexion 15h') || 
              texteNorm.includes('connexion 17h') || texteNorm.includes('ids connect')) {
