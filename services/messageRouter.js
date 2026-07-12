@@ -186,7 +186,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         
         console.log(`🔍 Détection IA: ${detection.type} | Extraction Locale: ${analyseLocale.type}`);
 
-        if (detection.est_rapport && detection.type !== 'inconnu') {
+        // ✅ NOUVELLE CONDITION : On valide si SOIT le moteur local, SOIT l'IA trouve le rapport !
+        if (analyseLocale.type !== 'inconnu' || (detection.est_rapport && detection.type !== 'inconnu')) {
             const manager = config.managers[participantJid] || { nom: expediteur };
             const destination = getDestination(detection.type);
 
