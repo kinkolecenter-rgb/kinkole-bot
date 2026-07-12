@@ -89,6 +89,25 @@ async function disconnect() {
     await prisma.$disconnect();
 }
 
+async function getReportsAujourdhui(typeRapport) {
+    try {
+        const debutJournee = new Date();
+        debutJournee.setHours(0, 0, 0, 0);
+
+        return await prisma.report.findMany({
+            where: {
+                type: typeRapport,
+                cree_le: {
+                    gte: debutJournee
+                }
+            }
+        });
+    } catch (error) {
+        console.error(`⚠️ Erreur lecture DB pour getReportsAujourdhui (${typeRapport}):`, error);
+        return [];
+    }
+}
+
 module.exports = {
     prisma,
     upsertManager,
@@ -97,5 +116,6 @@ module.exports = {
     getDerniersMessages,
     getMessagesNonTraites, // 👈 Ajouté
     marquerMessageTraite,  // 👈 Ajouté
-    disconnect
+    disconnect,
+    getReportsAujourdhui
 };
