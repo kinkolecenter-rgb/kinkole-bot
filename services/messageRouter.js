@@ -329,6 +329,32 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     
                     return; // Fin du traitement
                 }
+                // ==========================================
+            // ⚙️ WORKFLOW CLASSIQUE (Rapports POS, PR Terrain, etc.)
+            // ==========================================
+            else {
+                // On cherche la destination dans la configuration
+                const destination = getDestination(typeLocal);
+                const groupeDest = destination ? config.groupesDestination[destination] : null;
+
+                if (groupeDest) {
+                    // On demande à l'IA si le rapport classique est complet
+                    const completude = await verifierCompletude(texteBrut, typeLocal);
+                    
+                    if (completude.complet) {
+                        await sock.sendMessage(groupeDest.id, { text: texteBrut });
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `✅ *${typeLocal.toUpperCase()}* de *${manager.nom}* → *${groupeDest.nom}*`
+                        });
+                    } else {
+                        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                            text: `⚠️ *${typeLocal.toUpperCase()}* de *${manager.nom}* incomplet.\n\n` +
+                                  `❌ Manquants :\n${completude.manquants.map(m => `• ${m}`).join('\n')}\n\n` +
+                                  `📍 Reçu dans : *${NOMS_GROUPES[jid] || jid}*`
+                        });
+                    }
+                }
+            }
 
                     // ==========================================
                 // ⚙️ WORKFLOW 6 : RÉSOLUTION DES NON-CLÔTURÉS
