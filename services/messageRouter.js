@@ -370,8 +370,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             else if (typeLocal === 'incident_cloture') {
                 const managerNom = manager.nom || expediteur;
                 
-                // 1. On cherche le format strict "ID = Montant" dans le texte
-                const regexIdMontant = /\b(\d{5,7})\s*=\s*([\d.,]+)\b/g;
+                // 1. On accepte le format "ID = Montant" OU "ID : Montant" (et on ignore "fc" etc.)
+                const regexIdMontant = /\b(\d{5,7})\s*[=:]\s*([\d.,]+)/g;
                 let matchId;
                 const incidentsDetectes = [];
                 
@@ -379,24 +379,24 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
                 }
 
-                // 2. CAS A : Le format EST respecté (Ex: "342135 = 337950 n'a pas cloturé")
+                // 2. CAS A : Le format EST détecté (Ex: "342135 = 337950" ou "2195937 : 123.700fc")
                 if (incidentsDetectes.length > 0) {
                     const idsEnregistres = [];
                     
-                    // 💾 On sauvegarde chaque machine séparément dans PostgreSQL
+                    // 💾 On sauvegarde chaque machine séparément dans PostgreSQL AVEC le montant
                     for (const inc of incidentsDetectes) {
                         await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
                         idsEnregistres.push(inc.id);
                     }
                     
-                    // 📝 On prépare le message pour le groupe (SANS le montant, juste les IDs)
+                    // 📝 On prépare le message pour le groupe (AUCUN MONTANT ICI, JUSTE LES IDs)
                     const phraseIds = idsEnregistres.length > 1 
                         ? `les ids ${idsEnregistres.join(', ')} n'ont pas cloturé` 
                         : `l'id ${idsEnregistres[0]} n'a pas cloturé`;
 
                     const messageMasque = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
 
-                    // 📤 On envoie le message au groupe des incidents
+                    // 📤 On envoie le message au groupe des incidents (Montants invisibles)
                     await sock.sendMessage('243900435187-1564716535@g.us', { text: messageMasque });
                     
                     // 🔔 Notification en privé pour toi
@@ -406,13 +406,14 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     return;
                 } 
                 
-                // 3. CAS B : Le format n'est PAS respecté (Ex: "L'ID 342135 n'a pas cloturé")
+                // 3. CAS B : Aucun ID ni montant détecté (Ex: "L'ID n'a pas cloturé")
                 else {
-                    const messageExigence = `⚠️ Alerte rejetée : Format incorrect.\n\nMerci de m'envoyer le raport avec ce modèle exact svp :\n\n*ID = montant* n'a pas cloturé\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
+                    const messageExigence = `⚠️ Alerte rejetée : Format incorrect.\n\nMerci de m'envoyer l'incident avec ce modèle exact pour que je puisse l'enregistrer dans la base :\n\n*ID = montant* (ou *ID : montant*)\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
                     await sock.sendMessage(jid, { text: messageExigence });
                     return;
                 }
             }
+                
             // ==========================================
             // ⚙️ WORKFLOW CLASSIQUE (Rapports POS, PR Terrain, etc.)
             // ==========================================
