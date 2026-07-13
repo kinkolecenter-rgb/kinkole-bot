@@ -408,7 +408,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 
                 // 3. CAS B : Aucun ID ni montant détecté (Ex: "L'ID n'a pas cloturé")
                 else {
-                    const messageExigence = `⚠️ Alerte rejetée : Format incorrect.\n\nMerci de m'envoyer l'incident avec ce modèle exact pour que je puisse l'enregistrer dans la base :\n\n*ID = montant* (ou *ID : montant*)\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
+                    const messageExigence = `⚠️ Rappory rejetée : Format incorrect.\n\nMerci de m'envoyer le rapport avec ce modèle  svp :\n\n*ID = montant* (ou *ID : montant*)\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
                     await sock.sendMessage(jid, { text: messageExigence });
                     return;
                 }
