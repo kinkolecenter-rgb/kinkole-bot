@@ -401,6 +401,16 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                         await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
                         idsEnregistres.push(inc.id);
                     }
+                    // 💾 NOUVEAU : On enregistre que le bilan a été fait (avec incident) pour bloquer l'alerte de 23h
+                    try {
+                        await db.prisma.report.create({
+                            data: {
+                                type: 'incident_cloture',
+                                contenu: { statut: 'INCIDENT_DECLARE' },
+                                managerJid: participantJid
+                            }
+                        });
+                    } catch (error) { console.error(error); }
                     
                     // 📝 On prépare le message pour le groupe (AUCUN MONTANT ICI, JUSTE LES IDs)
                     const phraseIds = idsEnregistres.length > 1 
