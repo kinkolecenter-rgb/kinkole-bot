@@ -76,11 +76,22 @@ function analyserRapport(texte) {
         texteNorm.includes("pas cloturer")
     ) {
         type = 'incident_cloture';
-        // On cherche des IDs qui font entre 5 et 7 chiffres pour ne rien rater !
-        const ids = texteNorm.match(/\b\d{5,7}\b/g) || [];
+        
+        // 💰 1. On extrait le montant (tout ce qui vient après le signe = ou :)
+        const matchMontant = texteNorm.match(/[=:]\s*([\d.]+)/);
+        const montantExtrait = matchMontant ? matchMontant[1].trim() : null;
+
+        // 🧹 2. On nettoie le texte pour isoler uniquement les IDs
+        let texteSansMontants = texteNorm
+            .replace(/(=|:)\s*\d+([.,]\d+)?/g, '') 
+            .replace(/\b\d+([.,]\d+)?\s*(fc|usd|\$)\b/g, '');
+            
+        const ids = texteSansMontants.match(/\b\d{5,7}\b/g) || [];
+        
         donnees = {
             ids_non_clotures: ids,
-            nombre: ids.length
+            nombre: ids.length,
+            montant: montantExtrait // 💾 Sauvegardé pour la Base de données !
         };
     }
 
