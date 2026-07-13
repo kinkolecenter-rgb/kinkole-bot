@@ -184,8 +184,21 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     // ⚙️ WORKFLOW : VALIDATION QUOTIDIENNE & RÉSOLUTION
     // ==========================================
     
-    // 1. Réponse au "Tout est OK" (Suite à la question de 23h)
+    // 1. Réponse au "Tout est OK" 
     if (texteNormalise === 'oui' || texteNormalise === 'tout est ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('clôture normale') || texteNormalise.includes('tout le monde a cloture')) {
+        
+        // 💾 NOUVEAU : On enregistre que le bilan a été fait pour ne plus le déranger à 23h !
+        try {
+            await db.upsertManager(participantJid, expediteur || 'Manager Inconnu');
+            await db.prisma.report.create({
+                data: {
+                    type: 'incident_cloture',
+                    contenu: { statut: 'TOUT_EST_OK' },
+                    managerJid: participantJid
+                }
+            });
+        } catch (error) { console.error(error); }
+
         await sock.sendMessage(jid, { text: `✅ Merci, bien reçu. Bonne fin de journée !` });
         return;
     }
