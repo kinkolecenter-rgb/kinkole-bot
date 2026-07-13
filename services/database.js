@@ -108,14 +108,68 @@ async function getReportsAujourdhui(typeRapport) {
     }
 }
 
+// ==========================================
+// 🚨 SUIVI DES INCIDENTS (NON-CLÔTURÉS)
+// ==========================================
+
+async function sauvegarderIncidentCloture(machineId, montant, managerJid) {
+    try {
+        await upsertManager(managerJid, 'Manager Inconnu');
+        return await prisma.incidentCloture.create({
+            data: {
+                machineId: String(machineId).trim(),
+                montant: montant ? String(montant).trim() : null,
+                statut: "NON_RESOLU",
+                managerJid: managerJid
+            }
+        });
+    } catch (error) {
+        console.error('❌ Erreur DB (sauvegarderIncidentCloture):', error.message);
+    }
+}
+
+async function getIncidentsNonResolus() {
+    try {
+        return await prisma.incidentCloture.findMany({
+            where: { statut: "NON_RESOLU" },
+            include: { manager: true } // Permet de savoir quel manager a le problème
+        });
+    } catch (error) {
+        console.error('❌ Erreur DB (getIncidentsNonResolus):', error.message);
+        return [];
+    }
+}
+
+async function marquerIncidentResolu(machineId) {
+    try {
+        // On met à jour toutes les entrées "NON_RESOLU" correspondant à cet ID
+        return await prisma.incidentCloture.updateMany({
+            where: { 
+                machineId: String(machineId).trim(),
+                statut: "NON_RESOLU" 
+            },
+            data: { 
+                statut: "RESOLU",
+                dateResolution: new Date()
+            }
+        });
+    } catch (error) {
+        console.error('❌ Erreur DB (marquerIncidentResolu):', error.message);
+    }
+}
+
 module.exports = {
     prisma,
     upsertManager,
     sauvegarderMessage,
     sauvegarderReport,
     getDerniersMessages,
-    getMessagesNonTraites, // 👈 Ajouté
-    marquerMessageTraite,  // 👈 Ajouté
+    getMessagesNonTraites,
+    marquerMessageTraite,
     disconnect,
-    getReportsAujourdhui
+    getReportsAujourdhui,
+    // 👇 Les 3 nouvelles fonctions ajoutées ici :
+    sauvegarderIncidentCloture,
+    getIncidentsNonResolus,
+    marquerIncidentResolu
 };
