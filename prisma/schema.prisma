@@ -16,35 +16,36 @@ model Shop {
 }
 
 model Manager {
-  jid         String    @id
-  nom         String    
-  role        String    @default("Manager")
-  shopId      Int?
-  shop        Shop?     @relation(fields: [shopId], references: [id])
-  rapports    Report[]
+  jid              String    @id
+  nom              String    
+  role             String    @default("Manager")
+  shopId           Int?
+  shop             Shop?     @relation(fields: [shopId], references: [id])
+  rapports         Report[]
+  incidentsCloture IncidentCloture[] // 👈 Nouveau lien pour tracker qui doit quoi
 }
 
 model Message {
-  id          String    @id @default(uuid())
-  groupeJid   String
-  senderJid   String
-  texte       String    @db.Text
-  estMedia    Boolean   @default(false)
-  timestamp   DateTime  @default(now())
-  incident    Incident?
-  est_traite  Boolean  @default(false)
+  id         String    @id @default(uuid())
+  groupeJid  String
+  senderJid  String
+  texte      String    @db.Text
+  estMedia   Boolean   @default(false)
+  timestamp  DateTime  @default(now())
+  incident   Incident?
+  est_traite Boolean   @default(false)
 }
 
 model Report {
-  id          String    @id @default(uuid())
-  type        String
-  contenu     Json
-  complet     Boolean   @default(true)
-  timestamp   DateTime  @default(now())
-  managerJid  String
-  manager     Manager   @relation(fields: [managerJid], references: [jid])
-  shopId      Int?
-  shop        Shop?     @relation(fields: [shopId], references: [id])
+  id         String    @id @default(uuid())
+  type       String
+  contenu    Json
+  complet    Boolean   @default(true)
+  timestamp  DateTime  @default(now())
+  managerJid String
+  manager    Manager   @relation(fields: [managerJid], references: [jid])
+  shopId     Int?
+  shop       Shop?     @relation(fields: [shopId], references: [id])
 }
 
 model Incident {
@@ -56,4 +57,18 @@ model Incident {
   timestamp   DateTime  @default(now())
   messageId   String    @unique
   message     Message   @relation(fields: [messageId], references: [id])
+}
+
+// ==========================================
+// 🚨 NOUVELLE TABLE : SUIVI DES NON-CLÔTURÉS
+// ==========================================
+model IncidentCloture {
+  id              String    @id @default(uuid())
+  machineId       String    // L'ID de la machine (ex: 342135)
+  montant         String?   // Le montant retenu (ex: 337950)
+  statut          String    @default("NON_RESOLU") // "NON_RESOLU" par défaut
+  dateDeclaration DateTime  @default(now())
+  dateResolution  DateTime? // Sera rempli quand le manager annoncera "résolu"
+  managerJid      String
+  manager         Manager   @relation(fields: [managerJid], references: [jid])
 }
