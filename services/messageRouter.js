@@ -181,21 +181,58 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     } catch (e) {}
 
     // ==========================================
-    // ⚙️ WORKFLOW : RÉSOLUTION DES NON-CLÔTURÉS
+    // ⚙️ WORKFLOW : VALIDATION QUOTIDIENNE & RÉSOLUTION
     // ==========================================
-    if (global.idsNonCloturesHier && global.idsNonCloturesHier.length > 0) {
-        if (texteNormalise.includes('resolu') || texteNormalise.includes('résolu') || texteNormalise === 'ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('tout est ok')) {
-            const idsConcernes = global.idsNonCloturesHier.join(', ');
-            const groupeIncidents = '243900435187-1564716535@g.us';
-            const msgResolution = `✅ *INCIDENT RÉSOLU*\n\nLe problème de non-clôture pour les IDs *${idsConcernes}* a été signalé comme résolu par ${expediteur}.`;
-            await sock.sendMessage(groupeIncidents, { text: msgResolution });
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Suivi terminé : Le problème des IDs *${idsConcernes}* est résolu.` });
-            global.idsNonCloturesHier = [];
+    
+    // 1. Réponse au "Tout est OK" (Suite à la question de 23h)
+    if (texteNormalise === 'oui' || texteNormalise === 'tout est ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('clôture normale') || texteNormalise.includes('tout le monde a cloture')) {
+        await sock.sendMessage(jid, { text: `✅ Merci, bien reçu. Bonne fin de journée !` });
+        return;
+    }
+
+    // 2. Le manager annonce qu'un ID spécifique est "Résolu"
+    if (texteNormalise.includes('resolu') || texteNormalise.includes('résolu')) {
+        // On cherche les IDs dans son message
+        const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
+        
+        if (idsResolus && idsResolus.length > 0) {
+            for (const machineId of idsResolus) {
+                await db.marquerIncidentResolu(machineId); // 💾 Mise à jour en base de données !
+            }
+            
+            const phraseResolution = idsResolus.length > 1 
+                ? `les ids ${idsResolus.join(', ')} le probleme est resolu` 
+                : `l'id ${idsResolus[0]} le probleme est resolu`;
+
+            await sock.sendMessage('243900435187-1564716535@g.us', { text: `✅ Mise à jour DB : ${phraseResolution}` });
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Incident clos en DB pour : ${idsResolus.join(', ')}` });
             return;
         }
     }
 
-    // ── DÉTECTION ROBUSTE DE RAPPORTS ──
+    // 3. Capture automatique du format exigé : "ID = Montant"
+    const regexIdMontant = /\b(\d{5,7})\s*=\s*([\d.,]+)\b/g;
+    let matchId;
+    const incidentsDetectes = [];
+    
+    while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
+        incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
+    }
+
+    if (incidentsDetectes.length > 0) {
+        const idsEnregistres = [];
+        // On sauvegarde chaque ligne dans la DB
+        for (const inc of incidentsDetectes) {
+            await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+            idsEnregistres.push(inc.id);
+        }
+        
+        await sock.sendMessage('243900435187-1564716535@g.us', { 
+            text: `⚠️ Incidents enregistrés en base de données avec succès pour les IDs : *${idsEnregistres.join(', ')}*.\nStatut actuel : *NON RÉSOLU*.`
+        });
+        return; // Le dossier est créé, on s'arrête là !
+    }
+
     // ── DÉTECTION ROBUSTE DE RAPPORTS ──
     const estProbablementRapport = (
         texteNormalise.includes('ouverture du') ||
@@ -328,36 +365,54 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             }
 
             // ==========================================
-            // ⚙️ WORKFLOW 5 : INCIDENTS & NON-CLÔTURÉS
+            // ⚙️ WORKFLOW 5 : INCIDENTS & NON-CLÔTURÉS (STRICT DB)
             // ==========================================
             else if (typeLocal === 'incident_cloture') {
-                const ids = analyseLocale.donnees?.ids_non_clotures || [];
                 const managerNom = manager.nom || expediteur;
                 
-                // 📝 Adaptation de la phrase selon le nombre d'IDs
-                let phraseIds = '';
-                if (ids.length > 1) {
-                    phraseIds = `les ids ${ids.join(', ')} n'ont pas cloturé`;
-                } else if (ids.length === 1) {
-                    phraseIds = `l'id ${ids[0]} n'a pas cloturé`;
-                } else {
-                    phraseIds = `Aucun ID détecté.`; // Sécurité au cas où
+                // 1. On cherche le format strict "ID = Montant" dans le texte
+                const regexIdMontant = /\b(\d{5,7})\s*=\s*([\d.,]+)\b/g;
+                let matchId;
+                const incidentsDetectes = [];
+                
+                while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
+                    incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
                 }
-                
-                const messageMasque = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
 
-                // On envoie le message au groupe des incidents
-                await sock.sendMessage('243900435187-1564716535@g.us', { text: messageMasque });
-                
-                if (ids.length > 0) {
-                    global.idsNonCloturesHier = ids;
+                // 2. CAS A : Le format EST respecté (Ex: "342135 = 337950 n'a pas cloturé")
+                if (incidentsDetectes.length > 0) {
+                    const idsEnregistres = [];
+                    
+                    // 💾 On sauvegarde chaque machine séparément dans PostgreSQL
+                    for (const inc of incidentsDetectes) {
+                        await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+                        idsEnregistres.push(inc.id);
+                    }
+                    
+                    // 📝 On prépare le message pour le groupe (SANS le montant, juste les IDs)
+                    const phraseIds = idsEnregistres.length > 1 
+                        ? `les ids ${idsEnregistres.join(', ')} n'ont pas cloturé` 
+                        : `l'id ${idsEnregistres[0]} n'a pas cloturé`;
+
+                    const messageMasque = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
+
+                    // 📤 On envoie le message au groupe des incidents
+                    await sock.sendMessage('243900435187-1564716535@g.us', { text: messageMasque });
+                    
+                    // 🔔 Notification en privé pour toi
                     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                        text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${managerNom}* transféré. (Montant enregistré en DB)` 
+                        text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${managerNom}* transféré.\n(Enregistré en DB avec le montant)` 
                     });
+                    return;
+                } 
+                
+                // 3. CAS B : Le format n'est PAS respecté (Ex: "L'ID 342135 n'a pas cloturé")
+                else {
+                    const messageExigence = `⚠️ Alerte rejetée : Format incorrect.\n\nMerci de m'envoyer le raport avec ce modèle exact svp :\n\n*ID = montant* n'a pas cloturé\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
+                    await sock.sendMessage(jid, { text: messageExigence });
+                    return;
                 }
-                return;
             }
-
             // ==========================================
             // ⚙️ WORKFLOW CLASSIQUE (Rapports POS, PR Terrain, etc.)
             // ==========================================
