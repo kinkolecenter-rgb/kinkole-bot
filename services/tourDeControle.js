@@ -38,10 +38,17 @@ function initialiserTourDeControle(sock) {
         verifierEtRappeler(sock, 'fermeture', "de Fermeture (Dernier Rapport)", GROUPE_ALERTES);
     });
 
-    // 7. Rappel Non-Clôturés (23h00)
-    cron.schedule('0 23 * * *', async () => {
-        verifierEtRappeler(sock, 'incident_cloture', "des Non-Clôturés", GROUPE_ALERTES);
-    });
+    // ==========================================
+    // 🚨 7. RAPPELS INCIDENTS EN COURS (10h, 16h et 22h45)
+    // ==========================================
+    cron.schedule('0 10 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_ALERTES));
+    cron.schedule('0 16 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_ALERTES));
+    cron.schedule('45 22 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_ALERTES));
+
+    // ==========================================
+    // 🛑 8. VÉRIFICATION QUOTIDIENNE OBLIGATOIRE (23h00)
+    // ==========================================
+    cron.schedule('0 23 * * *', async () => verificationClotureQuotidienne(sock, GROUPE_ALERTES));
 }
 
 /**
@@ -69,6 +76,53 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         }
     } catch (error) {
         console.error(`❌ Erreur dans la Tour de Contrôle pour ${typeRapport}:`, error.message);
+    }
+}
+
+/**
+ * 🚨 Relance uniquement s'il y a des incidents ouverts (10h, 16h et 22h45)
+ * Connectée à la Base de données !
+ */
+async function rappelerIncidentsActifs(sock, groupeId) {
+    try {
+        const incidents = await db.getIncidentsNonResolus();
+        
+        if (incidents && incidents.length > 0) {
+            const idsConcernes = [...new Set(incidents.map(inc => inc.machineId))].join(', ');
+            
+            const phraseIds = incidents.length > 1 
+                ? `les IDs *${idsConcernes}* n'ont pas clôturé` 
+                : `l'ID *${idsConcernes}* n'a pas clôturé`;
+
+            const msgRelance = `⚠️ *RAPPEL INCIDENT EN COURS* ⚠️\n\nRappel concernant ${phraseIds}.\n\n👉 Merci de faire une mise à jour (répondez avec l'ID suivi de *"résolu"*).`;
+            await sock.sendMessage(groupeId, { text: msgRelance });
+        }
+    } catch (error) {
+        console.error(`❌ Erreur rappel incidents :`, error.message);
+    }
+}
+
+/**
+ * 🛑 Le devoir quotidien strict de 23h00
+ * Connecté à la Base de données !
+ */
+async function verificationClotureQuotidienne(sock, groupeId) {
+    try {
+        const incidents = await db.getIncidentsNonResolus();
+        
+        // CAS 1 : Il y a des incidents non résolus, on exige le bilan final
+        if (incidents && incidents.length > 0) {
+            const idsConcernes = [...new Set(incidents.map(inc => inc.machineId))].join(', ');
+            const msgBilan = `⚠️ *BILAN DE FIN DE JOURNÉE (23h00)* ⚠️\n\nLes machines suivantes sont toujours signalées non-clôturées : *${idsConcernes}*.\n\n👉 Quel est l'état final ? (répondez avec l'ID suivi de *"résolu"*).`;
+            await sock.sendMessage(groupeId, { text: msgBilan });
+        } 
+        // CAS 2 : Aucun incident connu, on pose la question obligatoire à tout le monde
+        else {
+            const msgVerif = `⚠️ *VÉRIFICATION QUOTIDIENNE DE CLÔTURE (23h00)* ⚠️\n\nBonsoir cher manager.\nEst-ce que tout le monde a clôturé aujourd'hui ?\n\n👉 Si oui, répondez *"tout est ok"* ou *"clôture normale"*.\n👉 Si non, déclarez l'incident immédiatement (Format : *ID = Montant n'a pas cloturé*).`;
+            await sock.sendMessage(groupeId, { text: msgVerif });
+        }
+    } catch (error) {
+        console.error(`❌ Erreur vérification clôture 23h :`, error.message);
     }
 }
 
