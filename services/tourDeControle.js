@@ -49,6 +49,11 @@ function initialiserTourDeControle(sock) {
     // 🛑 8. VÉRIFICATION QUOTIDIENNE OBLIGATOIRE (23h00)
     // ==========================================
     cron.schedule('0 23 * * *', async () => verificationClotureQuotidienne(sock, GROUPE_ALERTES));
+
+    // ==========================================
+    // 👤 9. ESCALADE DIRECTE AU PATRON EN CAS DE SILENCE (23h59)
+    // ==========================================
+    cron.schedule('59 23 * * *', async () => alertePatronSilencieux(sock));
 }
 
 /**
@@ -63,10 +68,8 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
             const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu dans le système.\n\nMerci de l'envoyer immédiatement pour la mise à jour des statistiques.`;
             
-            // Envoi dans Synchro Kinkole
             await sock.sendMessage(groupeId, { text: messageAlerte });
             
-            // Notification privée pour toi
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
                 text: `🚨 *Rapport Manquant* : Le rapport ${nomRapport} est en retard.` 
             });
@@ -81,7 +84,6 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
 
 /**
  * 🚨 Relance uniquement s'il y a des incidents ouverts (10h, 16h et 22h45)
- * Connectée à la Base de données !
  */
 async function rappelerIncidentsActifs(sock, groupeId) {
     try {
@@ -104,25 +106,52 @@ async function rappelerIncidentsActifs(sock, groupeId) {
 
 /**
  * 🛑 Le devoir quotidien strict de 23h00
- * Connecté à la Base de données !
  */
 async function verificationClotureQuotidienne(sock, groupeId) {
     try {
         const incidents = await db.getIncidentsNonResolus();
         
-        // CAS 1 : Il y a des incidents non résolus, on exige le bilan final
+        // CAS 1 : Il y a des incidents non résolus en DB, on exige le bilan final
         if (incidents && incidents.length > 0) {
             const idsConcernes = [...new Set(incidents.map(inc => inc.machineId))].join(', ');
             const msgBilan = `⚠️ *BILAN DE FIN DE JOURNÉE (23h00)* ⚠️\n\nLes machines suivantes sont toujours signalées non-clôturées : *${idsConcernes}*.\n\n👉 Quel est l'état final ? (répondez avec l'ID suivi de *"résolu"*).`;
             await sock.sendMessage(groupeId, { text: msgBilan });
         } 
-        // CAS 2 : Aucun incident connu, on pose la question obligatoire à tout le monde
+        // CAS 2 : Aucun incident actif en DB
         else {
-            const msgVerif = `⚠️ *VÉRIFICATION QUOTIDIENNE DE CLÔTURE (23h00)* ⚠️\n\nBonsoir cher manager.\nEst-ce que tout le monde a clôturé aujourd'hui ?\n\n👉 Si oui, répondez *"tout est ok"* ou *"clôture normale"*.\n👉 Si non, déclarez l'incident immédiatement (Format : *ID = Montant n'a pas cloturé*).`;
-            await sock.sendMessage(groupeId, { text: msgVerif });
+            // On vérifie si un manager a déjà validé la situation plus tôt (Logique Fixture)
+            const rapportsDuJour = await db.getReportsAujourdhui('incident_cloture');
+            
+            if (rapportsDuJour && rapportsDuJour.length > 0) {
+                console.log(`✅ Bilan de clôture déjà reçu aujourd'hui par anticipation. Le bot reste silencieux.`);
+            } else {
+                // Silence radio total de l'équipe, le bot pose la question obligatoire
+                const msgVerif = `⚠️ *VÉRIFICATION QUOTIDIENNE DE CLÔTURE (23h00)* ⚠️\n\nBonsoir cher manager.\nEst-ce que tout le monde a clôturé aujourd'hui ?\n\n👉 Si oui, répondez *"tout est ok"* ou *"clôture normale"*.\n👉 Si non, déclarez l'incident immédiatement (Format : *ID = Montant*).`;
+                await sock.sendMessage(groupeId, { text: msgVerif });
+            }
         }
     } catch (error) {
         console.error(`❌ Erreur vérification clôture 23h :`, error.message);
+    }
+}
+
+/**
+ * 👤 ESCALADE DIRECTE : Alerte privée pour toi à 23h59 si personne n'a répondu
+ */
+async function alertePatronSilencieux(sock) {
+    try {
+        const rapportsDuJour = await db.getReportsAujourdhui('incident_cloture');
+        
+        if (!rapportsDuJour || rapportsDuJour.length === 0) {
+            const msgAlerte = `🚨 *ALERTE ROUGE - CLÔTURE INCONNUE* 🚨\n\nAttention Boss, l'équipe de nuit n'a jamais répondu à la vérification de clôture de 23h00.\n\nLe groupe est silencieux, le statut final de la journée n'a pas été validé par les managers.`;
+            
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: msgAlerte });
+            console.log(`🚨 Escalade envoyée au Boss : Clôture non validée !`);
+        } else {
+            console.log(`✅ Fin de journée validée, pas besoin d'alerter le patron.`);
+        }
+    } catch (error) {
+        console.error(`❌ Erreur escalade patron 23h59 :`, error.message);
     }
 }
 
