@@ -63,11 +63,21 @@ function analyserRapport(texte) {
     }
 
     // ==========================================
+   // ==========================================
     // 4. DÉTECTION : NON CLÔTURE / INCIDENT
     // ==========================================
-    else if (texteNorm.includes('non clôturé') || texteNorm.includes('non cloture')) {
+    else if (
+        texteNorm.includes('non clôturé') || 
+        texteNorm.includes('non cloture') ||
+        texteNorm.includes("n'a pas clôturé") ||
+        texteNorm.includes("n'a pas cloture") ||
+        texteNorm.includes("n'ont pas clôturer") ||
+        texteNorm.includes("n'ont pas cloture") ||
+        texteNorm.includes("pas cloturer")
+    ) {
         type = 'incident_cloture';
-        const ids = texteNorm.match(/\b\d{6}\b/g) || [];
+        // On cherche des IDs qui font entre 5 et 7 chiffres pour ne rien rater !
+        const ids = texteNorm.match(/\b\d{5,7}\b/g) || [];
         donnees = {
             ids_non_clotures: ids,
             nombre: ids.length
