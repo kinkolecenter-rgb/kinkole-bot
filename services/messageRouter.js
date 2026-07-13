@@ -410,7 +410,14 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
         console.log('🔒 Rapport de coffre brut reçu du patron, formatage en cours...');
         try {
             const rapportFormate = formaterRapportCoffre(texte);
+            
+            // 1. Envoi WhatsApp
             await sock.sendMessage(config.groupesDestination.s_check.id, { text: rapportFormate });
+            
+            // 2. 💾 SAUVEGARDE EN BASE DE DONNÉES (Pour la Tour de Contrôle)
+            await db.sauvegarderReport('coffre', { texte: texte }, jid, true, null);
+            
+            // 3. Confirmation
             await sock.sendMessage(jid, { text: `✅ Rapport formaté et publié avec succès dans *S Check* !` });
             return; 
         } catch (error) {
@@ -419,7 +426,6 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
             return;
         }
     }
-
     if (texte.trim().toUpperCase() === 'PING') {
         await sock.sendMessage(jid, { text: 'PONG ✅' });
         return;
