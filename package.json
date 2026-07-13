@@ -18,9 +18,8 @@
     "node-cron": "^3.0.3",
     "ioredis": "^5.4.1",
     "pino": "^9.7.0",
-    "qrcode": "^1.5.4"
-  },
-  "devDependencies": {
+    "qrcode": "^1.5.4",
     "prisma": "^5.10.0"
-  }
+  },
+  "devDependencies": {}
 }
