@@ -332,17 +332,28 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             // ==========================================
             else if (typeLocal === 'incident_cloture') {
                 const ids = analyseLocale.donnees?.ids_non_clotures || [];
-                const groupeIncidents = '243900435187-1564716535@g.us'; 
+                const managerNom = manager.nom || expediteur;
                 
-                await sock.sendMessage(groupeIncidents, { text: texteBrut });
+                // 📝 Adaptation de la phrase selon le nombre d'IDs
+                let phraseIds = '';
+                if (ids.length > 1) {
+                    phraseIds = `les ids ${ids.join(', ')} n'ont pas cloturé`;
+                } else if (ids.length === 1) {
+                    phraseIds = `l'id ${ids[0]} n'a pas cloturé`;
+                } else {
+                    phraseIds = `Aucun ID détecté.`; // Sécurité au cas où
+                }
+                
+                const messageMasque = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
+
+                // On envoie le message au groupe des incidents
+                await sock.sendMessage('243900435187-1564716535@g.us', { text: messageMasque });
                 
                 if (ids.length > 0) {
                     global.idsNonCloturesHier = ids;
                     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                        text: `⚠️ *RAPPORT NON CLÔTURÉ* transféré. Les IDs *${ids.join(', ')}* ont été mis en mémoire pour le suivi de demain matin.` 
+                        text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${managerNom}* transféré. (Montant enregistré en DB)` 
                     });
-                } else {
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Rapport des clôtures validé : Rien à signaler.` });
                 }
                 return;
             }
