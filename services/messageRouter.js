@@ -3,6 +3,7 @@ const traiterMessage = require('./reportService');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./routeurRapports');
 const db = require('./database'); 
 const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
+const { gererCommandesPatron } = require('./menuPatron');
 const cacheOuverture = new Map(); // 🧠 Mémoire pour retenir le nombre de pages du jour
 
 // Les groupes
@@ -46,13 +47,25 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         if (msg.key.fromMe) continue;
         const jid = msg.key.remoteJid;
 
+        // =========================================================
+        // 👑 INTERCEPTEUR : COMMANDES SECRÈTES DU PATRON (EN PRIVÉ)
+        // =========================================================
+        if (!jid.includes('@g.us')) { 
+            const texteBrut = extraireTexte(msg); // On extrait le texte du message
+            if (texteBrut.startsWith('!')) {      // Si le message commence par "!"
+                const commandeTraitee = await gererCommandesPatron(sock, jid, texteBrut);
+                if (commandeTraitee) continue;    // Si c'est une commande valide, on stoppe le traitement ici
+            }
+        }
+        // =========================================================
+
         // 1. TRAITEMENT DES MESSAGES DE GROUPES
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
             continue;
         }
 
-        // 2. TRAITEMENT DES MESSAGES PRIVÉS
+        // 2. TRAITEMENT DES MESSAGES PRIVÉS CLASSIQUES
         if (!jid.includes('@g.us')) {
             await gererMessagePrive(sock, msg, jid, assistant);
         }
