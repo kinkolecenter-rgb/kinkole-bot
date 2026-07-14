@@ -8,7 +8,7 @@ const config = require('../config');
 async function gererCommandesPatron(sock, jid, texteBrut) {
     // 1. SÉCURITÉ : Vérifier si le message vient de TOI
     const numeroPatron = `${config.monNumero}@s.whatsapp.net`;
-    if (jid !== numeroPatron) return false; // Si ce n'est pas toi, on ignore
+    //if (jid !== numeroPatron) return false; // Si ce n'est pas toi, on ignore
 
     const texteNormalise = texteBrut.trim().toLowerCase();
 
