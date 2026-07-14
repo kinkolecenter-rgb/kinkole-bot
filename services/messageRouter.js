@@ -172,106 +172,108 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE (PLUGUÉ ICI - ULTRA PRIORITAIRE)
     // =================================================================
     
-    // 🛑 SÉCURITÉ : On bloque l'intercepteur si c'est un rapport "Reste Caution"
-    const estResteCaution = texteNormalise.includes('reste caution');
+    // 1. CONDITIONS STRICTES DE DÉTECTION (Fini les fausses alertes !)
+    const estNonCloture = texteNormalise.includes('non cloture') || 
+                          texteNormalise.includes('non clôture') || 
+                          texteNormalise.includes('pas cloture') || 
+                          texteNormalise.includes('pas clôturé') || 
+                          texteNormalise.includes('pas cloturer');
 
-    // 1. Détection immédiate du format "ID = Montant" ou "ID : Montant" (Ex: 2195937 : 123.700fc)
-    const regexIdMontant = /\b(\d{5,7})\s*[=:]\s*([\d.,]+)/g;
-    let matchId;
-    const incidentsDetectes = [];
+    const estResolution = texteNormalise.includes('resolu') || texteNormalise.includes('résolu');
     
-    // On n'applique la recherche d'incident QUE si ce n'est pas un rapport reste caution
-    if (!estResteCaution) {
+    const estBilanOk = texteNormalise === 'oui' || texteNormalise === 'tout est ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('clôture normale') || texteNormalise.includes('tout le monde a cloture');
+
+    // 🕒 Calcul du "Couvre-feu" : L'envoi public n'est autorisé qu'entre 22h et 4h du matin
+    const heureActuelle = new Date().getHours();
+    const fenetreCloture = (heureActuelle >= 22 || heureActuelle < 4);
+
+    // ==========================================
+    // 🔴 CAS A : DECLARATION D'UN NON-CLÔTURÉ
+    // ==========================================
+    if (estNonCloture) {
+        const regexIdMontant = /\b(\d{5,7})\s*[=:]\s*([\d.,]+)/g;
+        let matchId;
+        const incidentsDetectes = [];
+        
         while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
             incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
         }
-    }
-    if (incidentsDetectes.length > 0) {
-        const idsEnregistres = [];
-        
-        // 💾 Sauvegarde immédiate dans PostgreSQL avec les montants
-        for (const inc of incidentsDetectes) {
-            await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
-            idsEnregistres.push(inc.id);
-        }
-        
-        // 💾 On génère le ticket de rapport pour bloquer définitivement le rappel de 23h00 (Logique Fixture)
-        try {
-            await db.prisma.report.create({
-                data: {
-                    type: 'incident_cloture',
-                    contenu: { statut: 'INCIDENT_DECLARE' },
-                    managerJid: participantJid
-                }
+
+        if (incidentsDetectes.length > 0) {
+            const idsEnregistres = [];
+            
+            // Sauvegarde en DB
+            for (const inc of incidentsDetectes) {
+                try {
+                    await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+                    idsEnregistres.push(inc.id);
+                } catch (err) { console.error('Erreur DB Incident:', err.message); }
+            }
+            
+            try {
+                await db.prisma.report.create({
+                    data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
+                });
+            } catch (error) {}
+
+            const phraseIds = idsEnregistres.length > 1 
+                ? `les ids ${idsEnregistres.join(', ')} n'ont pas cloturé` 
+                : `l'id ${idsEnregistres[0]} n'a pas cloturé`;
+
+            const messagePublic = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
+
+            // 🛑 VÉRIFICATION DE L'HEURE : On publie dans le groupe UNIQUEMENT si on est dans la fenêtre 22h-4h
+            if (fenetreCloture) {
+                await sock.sendMessage('243900435187-1564716535@g.us', { text: messagePublic });
+            }
+
+            // 🔔 Toi, tu reçois l'alerte en privé dans TOUS LES CAS, avec le montant et l'état d'envoi.
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${expediteur}*.\n(DB validée. Envoi public : ${fenetreCloture ? "✅ OUI" : "❌ NON - Hors Heure"})` 
             });
-        } catch (error) { 
-            console.error('❌ Erreur DB (Enregistrement ticket clôture):', error.message); 
+            return; 
         }
-
-        // 📝 Message public pour le groupe des incidents (⚠️ SANS LE MONTANT)
-        const phraseIds = idsEnregistres.length > 1 
-            ? `les ids ${idsEnregistres.join(', ')} n'ont pas cloturé` 
-            : `l'id ${idsEnregistres[0]} n'a pas cloturé`;
-
-        await sock.sendMessage('243900435187-1564716535@g.us', { 
-            text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}` 
-        });
-        
-        // 🔔 Notification privée pour toi (Avec confirmation)
-        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-            text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${expediteur || 'Manager'}* transféré.\n(Enregistré en DB avec le montant)` 
-        });
-        return; // Le traitement est fini, on stoppe tout pour ce message !
     }
 
-    // 2. Réponse immédiate au "Tout est OK" (Par anticipation ou suite à la question)
-    if (texteNormalise === 'oui' || texteNormalise === 'tout est ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('clôture normale') || texteNormalise.includes('tout le monde a cloture')) {
-        try {
-            await db.upsertManager(participantJid, expediteur || 'Manager Inconnu');
-            await db.prisma.report.create({
-                data: {
-                    type: 'incident_cloture',
-                    contenu: { statut: 'TOUT_EST_OK' },
-                    managerJid: participantJid
-                }
-            });
-        } catch (error) { 
-            console.error('❌ Erreur DB (Enregistrement Bilan OK):', error.message); 
-        }
-
-        await sock.sendMessage(jid, { text: `✅ Merci, bien reçu. Bonne fin de journée !` });
-        return;
-    }
-
-    // 3. Réponse immédiate aux résolutions ("résolu" + IDs)
-    if (texteNormalise.includes('resolu') || texteNormalise.includes('résolu')) {
+    // ==========================================
+    // 🟢 CAS B : RÉSOLUTION D'UN INCIDENT (Permis à toute heure)
+    // ==========================================
+    if (estResolution) {
         const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
         
         if (idsResolus && idsResolus.length > 0) {
             for (const machineId of idsResolus) {
-                await db.marquerIncidentResolu(machineId); // 💾 Fermeture en base de données
+                try { await db.marquerIncidentResolu(machineId); } catch (err) {}
             }
             
             const phraseResolution = idsResolus.length > 1 
                 ? `les ids ${idsResolus.join(', ')} le probleme est resolu` 
                 : `l'id ${idsResolus[0]} le probleme est resolu`;
 
+            // On publie toujours la résolution dans le groupe !
             await sock.sendMessage('243900435187-1564716535@g.us', { text: `✅ Mise à jour : ${phraseResolution}` });
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Incident clos en DB pour : ${idsResolus.join(', ')}` });
             return;
         }
     }
 
-    // 4. Sécurité : Le manager annonce un non-clôturé mais oublie le montant (Ex: "L'id 2195937 n'a pas clôturé")
-    if (texteNormalise.includes('pas cloture') || texteNormalise.includes('pas clôturé') || texteNormalise.includes('non cloture') || texteNormalise.includes('clôturer')) {
-        const idsTrouves = texteBrut.match(/\b\d{5,7}\b/g);
-        
-        if (idsTrouves && idsTrouves.length > 0) {
-            const messageExigence = `⚠️ Alerte rejetée : Format incorrect.\n\nMerci de m'envoyer l'incident avec ce modèle exact pour que je puisse l'enregistrer dans la base :\n\n*ID = montant* (ou *ID : montant*)\n*(Ex: 342135 = 337950 n'a pas cloturé)*`;
-            await sock.sendMessage(jid, { text: messageExigence });
-            return; 
-        }
+    // ==========================================
+    // 🔵 CAS C : TOUT EST OK
+    // ==========================================
+    if (estBilanOk) {
+        try {
+            await db.upsertManager(participantJid, expediteur || 'Manager Inconnu');
+            await db.prisma.report.create({
+                data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
+            });
+        } catch (error) {}
+
+        await sock.sendMessage(jid, { text: `✅ Merci, bien reçu. Bonne fin de journée !` });
+        return;
     }
+    // =================================================================
+    
+    
     // =================================================================
 
     // ── DÉTECTION DES AUTRES RAPPORTS STANDARDS (OUVERTURE, FIXTURE...) ──
