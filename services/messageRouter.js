@@ -168,15 +168,24 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE (PLUGUÉ ICI - ULTRA PRIORITAIRE)
     // =================================================================
     
+    // =================================================================
+    // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE (PLUGUÉ ICI - ULTRA PRIORITAIRE)
+    // =================================================================
+    
+    // 🛑 SÉCURITÉ : On bloque l'intercepteur si c'est un rapport "Reste Caution"
+    const estResteCaution = texteNormalise.includes('reste caution');
+
     // 1. Détection immédiate du format "ID = Montant" ou "ID : Montant" (Ex: 2195937 : 123.700fc)
     const regexIdMontant = /\b(\d{5,7})\s*[=:]\s*([\d.,]+)/g;
     let matchId;
     const incidentsDetectes = [];
     
-    while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
-        incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
+    // On n'applique la recherche d'incident QUE si ce n'est pas un rapport reste caution
+    if (!estResteCaution) {
+        while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
+            incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
+        }
     }
-
     if (incidentsDetectes.length > 0) {
         const idsEnregistres = [];
         
