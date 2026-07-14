@@ -288,7 +288,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         texteNormalise.includes('achat')
     );
 
-    if (estProbapport) {
+    if (estProbablementRapport) {
         const analyseLocale = analyserRapport(texteBrut); 
         let typeLocal = analyseLocale.type;
         let iaType = "Non consultée";
