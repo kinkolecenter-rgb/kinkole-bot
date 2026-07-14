@@ -6,12 +6,9 @@ const config = require('../config');
  * Gère les commandes secrètes envoyées par le patron en privé
  */
 async function gererCommandesPatron(sock, jid, texteBrut) {
-    // 1. SÉCURITÉ : Vérifier si le message vient de tes numéros autorisés
-    const numerosAutorises = [
-        `${config.monNumero}@s.whatsapp.net`,
-        `${config.secondaireNumero}@s.whatsapp.net`
-    ];
-    if (!numerosAutorises.includes(jid)) return false; // Le cadenas est remis !
+    // 1. SÉCURITÉ : Vérifie si l'ID contient ton numéro (pour contourner les :xx de WhatsApp)
+    const vientDuPatron = jid.includes(config.monNumero) || jid.includes(config.secondaireNumero);
+    if (!vientDuPatron) return false;
 
     const texteNormalise = texteBrut.trim().toLowerCase();
 
