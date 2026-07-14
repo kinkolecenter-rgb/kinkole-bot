@@ -155,43 +155,33 @@ async function alertePatronSilencieux(sock) {
     }
 }
 /**
- * Vérifie si le rapport a été envoyé dans sa tranche horaire stricte
+ * Vérifie les rapports par "Compteur" (infaillible contre les retards)
  */
 async function verifierRappelConnexion(sock, heureCible, nomRapport, groupeId) {
     try {
-        console.log(`🔍 Tour de Contrôle : Vérification horaire stricte pour [${nomRapport}]...`);
+        console.log(`🔍 Tour de Contrôle : Vérification par compteur pour [${nomRapport}]...`);
         
+        // 1. On compte tous les rapports de connexion reçus aujourd'hui depuis minuit
         const rapports = await db.getReportsAujourdhui('details_connexion');
-        let rapportRecuDansLeCreneau = false;
+        const nombreTotalAujourdhui = rapports ? rapports.length : 0;
 
-        if (rapports && rapports.length > 0) {
-            for (const r of rapports) {
-                const heureRapport = new Date(r.timestamp).getHours();
-                
-                // 📦 Définition des tiroirs (Tranches horaires)
-                let heureMin, heureMax;
-                if (heureCible === 12) { heureMin = 11; heureMax = 13; } // Tiroir 12h : de 11h00 à 13h59
-                if (heureCible === 15) { heureMin = 14; heureMax = 16; } // Tiroir 15h : de 14h00 à 16h29 (si on est à 15h30)
-                if (heureCible === 17) { heureMin = 16; heureMax = 19; } // Tiroir 17h : de 16h30 à 19h59
+        // 2. On définit l'objectif selon l'heure de l'alarme
+        let objectifRapports = 1;
+        if (heureCible === 12) objectifRapports = 1; // À 12h30, on veut 1 rapport
+        if (heureCible === 15) objectifRapports = 2; // À 15h30, on en veut 2
+        if (heureCible === 17) objectifRapports = 3; // À 17h30, on en veut 3 au total
 
-                // Si le rapport a été envoyé dans cette tranche, c'est gagné !
-                if (heureRapport >= heureMin && heureRapport <= heureMax) {
-                    rapportRecuDansLeCreneau = true;
-                    break; 
-                }
-            }
-        }
-
-        if (!rapportRecuDansLeCreneau) {
-            const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu pour cette session.\n\n👉 Merci de l'envoyer immédiatement.`;
+        // 3. Le jugement : est-ce qu'il manque des rapports ?
+        if (nombreTotalAujourdhui < objectifRapports) {
+            const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu (Nous en avons reçu ${nombreTotalAujourdhui} sur les ${objectifRapports} attendus à cette heure).\n\n👉 Merci de l'envoyer immédiatement.`;
             
             await sock.sendMessage(groupeId, { text: messageAlerte });
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Rapport Manquant* : Le rapport ${nomRapport} est en retard.` 
+                text: `🚨 *Rapport Manquant* : Le rapport ${nomRapport} est en retard (Total : ${nombreTotalAujourdhui}/${objectifRapports}).` 
             });
-            console.log(`🚨 Alerte envoyée pour retard sur : ${nomRapport}`);
+            console.log(`🚨 Alerte envoyée : il manque le rapport pour atteindre l'objectif de ${objectifRapports}.`);
         } else {
-            console.log(`✅ Le rapport [${nomRapport}] a bien été reçu dans sa tranche horaire.`);
+            console.log(`✅ Objectif atteint : ${nombreTotalAujourdhui} rapport(s) reçu(s). Aucun retard pour [${nomRapport}].`);
         }
     } catch (error) {
         console.error(`❌ Erreur dans la Tour de Contrôle pour ${nomRapport}:`, error.message);
