@@ -550,19 +550,24 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             if (typeLocal === 'ouverture') {
                 const pages = analyseLocale.donnees?.pages_imprimees;
                 cacheOuverture.set('pages_kinkole', pages || 8);
-                await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
 
-                // Fix 10 : accusé réception visible dans Synchro
-                await sock.sendMessage(jid, { text: `✅ *Ouverture reçue* — rapport transféré dans Gestion Center.` });
+                // Anti-doublon : ne pas renvoyer si déjà routé aujourd'hui
+                const ouverturesDuJour = await db.getReportsAujourdhui('ouverture');
+                if (ouverturesDuJour && ouverturesDuJour.length > 1) {
+                    console.log(`⚠️ Ouverture déjà routée aujourd'hui — envoi ignoré.`);
+                    return;
+                }
+
+                await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
 
                 // Fix 14 : avertir si pages manquantes
                 if (!pages) {
                     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                        text: `⚠️ *Rapport ouverture reçu mais le nombre de pages est absent.*\n\nLe calcul fixture utilisera 8 pages par défaut.\n\nDemande à ${expediteur} de préciser "Pages : X" dans son prochain rapport.`
+                        text: `⚠️ Ouverture reçue de *${expediteur}* mais le nombre de pages est absent.\n\nFixture calculée sur 8 pages par défaut.`
                     });
                 }
 
-                // Fix doublon : ne demander les taux que si pas encore reçus aujourd'hui
+                // Ne demander les taux que si pas encore reçus aujourd'hui
                 if (heureActuelle < 10) {
                     const fixturesDuJour = await db.getReportsAujourdhui('fixture');
                     if (!fixturesDuJour || fixturesDuJour.length === 0) {
@@ -575,6 +580,13 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
             // ⚙️ WORKFLOW 2 : CALCUL DES FIXTURES
             else if (typeLocal === 'fixture') {
+                // Anti-doublon : ne pas recalculer si déjà routé aujourd'hui
+                const fixturesDuJour = await db.getReportsAujourdhui('fixture');
+                if (fixturesDuJour && fixturesDuJour.length > 1) {
+                    console.log(`⚠️ Fixture déjà routée aujourd'hui — envoi ignoré.`);
+                    return;
+                }
+
                 const d = analyseLocale.donnees || {};
                 const pages = await getCachePages();
                 const copiesParAgent = 2;
@@ -597,18 +609,20 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                                             `Vente: ${d.taux_vente || '?'}`;
 
                 await sock.sendMessage(config.groupesDestination.rate_fixture.id, { text: rapportFixtureFinal });
-                // Fix 10 : accusé réception dans Synchro
-                await sock.sendMessage(jid, { text: `✅ *Fixtures calculées et publiées* dans Rates & Fixtures.` });
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Fixture calculée et publiée avec succès par *${expediteur}* !` });
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Fixture publiée par *${expediteur}*.` });
                 return;
             }
 
             // ⚙️ WORKFLOW 3 : FERMETURE
             else if (typeLocal === 'fermeture') {
+                const fermeturesDuJour = await db.getReportsAujourdhui('fermeture');
+                if (fermeturesDuJour && fermeturesDuJour.length > 1) {
+                    console.log(`⚠️ Fermeture déjà routée aujourd'hui — envoi ignoré.`);
+                    return;
+                }
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
-                await sock.sendMessage(jid, { text: `✅ *Dernier rapport reçu* — transféré dans Gestion Center.` });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `✅ *DERNIER RAPPORT* de *${expediteur}* validé et transféré dans *Gestion Center*.` 
+                    text: `✅ *DERNIER RAPPORT* de *${expediteur}* transféré dans *Gestion Center*.` 
                 });
                 return;
             }
@@ -616,7 +630,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             // ⚙️ WORKFLOW 4 : DÉTAILS CONNEXION
             else if (typeLocal === 'details_connexion') {
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
-                await sock.sendMessage(jid, { text: `✅ *Détails connexion reçus* — transférés dans Gestion Center.` });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
                     text: `✅ *DÉTAILS CONNEXION* de *${expediteur}* transféré dans *Gestion Center*.` 
                 });
