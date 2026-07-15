@@ -9,6 +9,12 @@ const GROUPE_DISPARUS = '243900435187-1564716535@g.us';
 let etatAttente = null;
 function setEtatAttente(ref) { etatAttente = ref; }
 
+// Fix 4 : utilitaire pour tronquer les messages trop longs (limite WhatsApp ~65000 chars)
+function tronquer(texte, max = 60000) {
+    if (texte.length <= max) return texte;
+    return texte.substring(0, max) + '\n\n_[Message tronqué — trop long]_';
+}
+
 function initialiserTourDeControle(sock, etatAttenteRef) {
     etatAttente = etatAttenteRef; // Référence partagée avec messageRouter
     console.log("🗼 Tour de Contrôle activée. Alertes configurées EXCLUSIVEMENT sur Synchro Kinkole...");
@@ -71,10 +77,20 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         const rapportsDuJour = await db.getReportsAujourdhui(typeRapport);
 
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
-            const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu.\n\nMerci de l'envoyer immédiatement.`;
+            // Fix 11 : identifier quel manager devait envoyer ce rapport
+            let responsable = '';
+            try {
+                const managers = await db.prisma.manager.findMany({ select: { nom: true, role: true } });
+                if (managers && managers.length > 0) {
+                    const noms = managers.map(m => m.nom).join(', ');
+                    responsable = `\n👤 *Responsables en service :* ${noms}`;
+                }
+            } catch (e) {}
+
+            const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu.${responsable}\n\nMerci de l'envoyer immédiatement.`;
             await sock.sendMessage(groupeId, { text: messageAlerte });
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Rapport Manquant* : ${nomRapport} est en retard.` 
+                text: `🚨 *Rapport Manquant* : ${nomRapport} est en retard.${responsable}` 
             });
         } else {
             console.log(`✅ Rapport [${typeRapport}] reçu aujourd'hui. Aucun rappel.`);
