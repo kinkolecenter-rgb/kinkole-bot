@@ -377,25 +377,33 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
     // ── RAPPORTS DU MATIN (Relances entre 9h et 13h) ──
     if (heure >= 9 && heure < 14) {
         if (!check(t => t.includes('ouverture du') || t.includes('bonjour team'))) {
-            manquantsManagers.push('Rapport ouverture matin');
+            // Vérifier aussi en DB avant d'alerter
+            const ouvertureDB = await db.getReportsAujourdhui('ouverture');
+            if (!ouvertureDB || ouvertureDB.length === 0) {
+                manquantsManagers.push('Rapport ouverture matin');
+            }
         }
         if (!check(t => t.includes('fixtures sport betting') || t.includes('taux de change'))) {
-            manquantsManagers.push('Fixtures & taux de change');
+            const fixtureDB = await db.getReportsAujourdhui('fixture');
+            if (!fixtureDB || fixtureDB.length === 0) {
+                manquantsManagers.push('Fixtures & taux de change');
+            }
         }
-        if (!check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() < 15)) {
+        // Coffre matin : vérifier Redis ET DB
+        const coffreMatin = check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() < 15);
+        const coffreMatinDB = await db.getReportsAujourdhui('coffre');
+        if (!coffreMatin && (!coffreMatinDB || coffreMatinDB.length === 0)) {
             manquantsCoffre.push('État coffre matin');
         }
         // 🔥 SUIVI DES NON-CLÔTURÉS DE LA VEILLE (Se déclenche vers 10h)
         if (heure === 10) {
-            // (On lira le cache du routeur qu'on va créer juste après)
             const idsHier = global.idsNonCloturesHier || []; 
             if (idsHier.length > 0) {
                 const rappelIncidents = `⚠️ *SUIVI DES NON-CLÔTURÉS D'HIER*\n\n` +
                                         `Les IDs suivants n'avaient pas clôturé hier soir : *${idsHier.join(', ')}*.\n\n` +
                                         `📢 Le problème est-il résolu ce matin ? Merci de confirmer.`;
-                
-                await sendVersGroupe('243900435187-1564716535@g.us', rappelIncidents); // Groupe Disparu/Viré
-                global.idsNonCloturesHier = []; // On vide la liste après avoir demandé
+                await sendVersGroupe('243900435187-1564716535@g.us', rappelIncidents);
+                global.idsNonCloturesHier = [];
             }
         }
     }
@@ -403,13 +411,18 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
     // ── RAPPORTS DU SOIR (Relances entre 21h et 01h du matin) ──
     if (heure >= 21 || heure < 2) {
         if (!check(t => t.includes('dernier rapport'))) {
-            manquantsManagers.push('Dernier rapport soir');
+            const fermetureDB = await db.getReportsAujourdhui('fermeture');
+            if (!fermetureDB || fermetureDB.length === 0) {
+                manquantsManagers.push('Dernier rapport soir');
+            }
         }
-        if (!check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() >= 14)) {
+        // Coffre soir : vérifier Redis ET DB
+        const coffreSoir = check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() >= 14);
+        const coffreSoirDB = await db.getReportsAujourdhui('coffre');
+        if (!coffreSoir && (!coffreSoirDB || coffreSoirDB.length === 0)) {
             manquantsCoffre.push('État coffre soir');
         }
         // ℹ️ La vérification clôture à 23h est gérée exclusivement par tourDeControle.js
-        // → verificationClotureQuotidienne() pour éviter les doublons
     }
 
     // ==========================================
