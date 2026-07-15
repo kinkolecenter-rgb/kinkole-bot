@@ -32,6 +32,8 @@ const creerMemoire = require('./services/memoire');
 const creerAssistant = require('./services/assistant');
 const { agentBrief } = require('./services/agents');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./services/routeurRapports');
+const { etatAttente } = require('./services/messageRouter');
+
 
 
 const app = express();
@@ -124,10 +126,12 @@ async function startBot() {
             isConnected = true;
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
-
+        
+            const { etatAttente } = require('./services/messageRouter');
+        
             lancerRattrapageAutomatique(sock, db);
-            initialiserTourDeControle(sock);
-
+            initialiserTourDeControle(sock, etatAttente, memoire);
+    
             // --- SCRIPT TEMPORAIRE POUR LISTER LES MEMBRES ---
             const groupeJid = "120363021280044937@g.us";
             
