@@ -195,24 +195,36 @@ async function lancerRattrapageAutomatique(sock, db) {
 
             for (const msg of messagesRata) {
                 if (!msg.texte) continue;
-                
+
                 const { analyserRapport } = require('./reportEngine'); 
                 const analyse = analyserRapport(msg.texte);
                 const typeLocal = analyse.type;
 
                 if (typeLocal !== 'inconnu') {
+                    // ✅ ANTI-DOUBLON : si ce type a déjà été traité aujourd'hui, on skip
+                    const dejaEnvoye = await db.getReportsAujourdhui(typeLocal);
+                    if (dejaEnvoye && dejaEnvoye.length > 0) {
+                        console.log(`⏭️ Rattrapage ignoré : [${typeLocal}] déjà traité aujourd'hui.`);
+                        await db.marquerMessageTraite(msg.id); // marquer pour ne plus le revoir
+                        continue;
+                    }
+
                     try {
                         await db.sauvegarderReport(typeLocal, analyse.donnees || {}, msg.senderJid, true, null);
                     } catch (e) {}
 
                     if (typeLocal === 'ouverture') {
                         await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: msg.texte });
-                        const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
-                        await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
+                        // Demande fixture seulement si pas encore reçue aujourd'hui
+                        const fixtureDuJour = await db.getReportsAujourdhui('fixture');
+                        if (!fixtureDuJour || fixtureDuJour.length === 0) {
+                            const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
+                            await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
+                        }
                     }
                     else if (typeLocal === 'fixture') {
                         const d = analyse.donnees || {};
-                        const pages = 8;
+                        const pages = await getCachePages();
                         const copiesParAgent = 2;
                         const totalParAgent = (pages * copiesParAgent) + (d.loto || 0) + (d.giga || 0) + (d.felicitation || 0);
                         const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\nNb. Pages: ${pages}\nNb.Copies par agent: ${copiesParAgent}\nFixture (other)\nloto: ${d.loto || 0}\nGiga: ${d.giga || 0}\nFélicitation : ${d.felicitation || 0}\nTotal/agt: ${totalParAgent}\n----------------\nTaux de change\nAchat: ${d.taux_achat || '?'}\nVente: ${d.taux_vente || '?'}`;
@@ -230,7 +242,6 @@ async function lancerRattrapageAutomatique(sock, db) {
         }
     }, 15 * 60 * 1000); 
 }
-
 /**
  * Gère la logique des messages reçus dans les groupes
  */
