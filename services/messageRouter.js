@@ -6,6 +6,19 @@ const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
 const { gererCommandesPatron } = require('./menuPatron');
 const cacheOuverture = new Map();
 
+async function getCachePages() {
+    if (cacheOuverture.has('pages_kinkole')) return cacheOuverture.get('pages_kinkole');
+    // Fallback : cherche dans le dernier rapport d'ouverture du jour en DB
+    try {
+        const rapports = await db.getReportsAujourdhui('ouverture');
+        if (rapports && rapports.length > 0) {
+            const pages = rapports[rapports.length - 1]?.contenu?.pages_imprimees;
+            if (pages) { cacheOuverture.set('pages_kinkole', pages); return pages; }
+        }
+    } catch (e) {}
+    return 8; // valeur par défaut
+}
+
 const GROUPE_SYNCHRO    = '120363021280044937@g.us';
 const GROUPE_DISPARUS   = '243900435187-1564716535@g.us';
 
@@ -32,6 +45,18 @@ const NOMS_GROUPES = {
 // =================================================================
 // Structure : { [groupeJid]: { etape: 'ATTENTE_REPONSE_23H' | 'ATTENTE_FORMAT', managerJid, timestamp } }
 const etatAttente = new Map();
+const EXPIRATION_ATTENTE_MS = 2 * 60 * 60 * 1000; // 2 heures
+
+// Nettoyage automatique des états expirés (toutes les 30 min)
+setInterval(() => {
+    const maintenant = Date.now();
+    for (const [jid, etat] of etatAttente.entries()) {
+        if (maintenant - etat.timestamp > EXPIRATION_ATTENTE_MS) {
+            etatAttente.delete(jid);
+            console.log(`🧹 État d'attente expiré et nettoyé pour : ${jid}`);
+        }
+    }
+}, 30 * 60 * 1000);
 
 const MODELE_NON_CLOTURE = `📝 *Modèle requis :*\n\nNon clôturé\n421596 = 150000\n1363049 = 75000\n\n_(Un ID et son montant par ligne, séparés par =)_`;
 
@@ -219,8 +244,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         '42967356150013@lid',  // Timothé Le Noir
         '265515029283001@lid', // Deborah Kavunga
         '90263603159168@lid',  // Trésor bk
-        '169230989307948@lid',  // Erick kenzo (Eric pos man)
-         '138277243904251@lid'  // Dimercia
+        '169230989307948@lid'  // Erick kenzo (Eric pos man)
     ];
     const estManagerAutorise = MANAGERS_AUTORISES.includes(participantJid);
 
@@ -366,10 +390,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         // ─────────────────────────────────────────────────────────
         // 🔴 CAS A : NON-CLÔTURÉ ENVOYÉ EN ANTICIPATION (avant 23h)
         // ─────────────────────────────────────────────────────────
-        const estFormatValide = parserIncidentsFormat(texteBrut).length > 0;
-        const estDansFeretreNuit = (heureActuelle >= 22 || heureActuelle < 4);
-        
-        if (estNonCloture || (!estRapportAutre && estDansFeretreNuit && (contiendIdsSeuls(texteBrut) || estFormatValide))) {
+        if (estNonCloture || (!estRapportAutre && heureActuelle >= 22 && contiendIdsSeuls(texteBrut))) {
             const incidents = parserIncidentsFormat(texteBrut);
 
             if (incidents.length > 0) {
@@ -487,7 +508,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             // ⚙️ WORKFLOW 2 : CALCUL DES FIXTURES
             else if (typeLocal === 'fixture') {
                 const d = analyseLocale.donnees || {};
-                const pages = cacheOuverture.get('pages_kinkole') || 8; 
+                const pages = await getCachePages();
                 const copiesParAgent = 2;
                 const loto = d.loto || 0;
                 const giga = d.giga || 0;
