@@ -72,6 +72,108 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
         return true; // Commande traitée avec succès
     }
 
+    // =========================================================
+    // 🚨 COMMANDE : !incidents (IDs non résolus en DB)
+    // =========================================================
+    if (texteNormalise === '!incidents') {
+        try {
+            const incidents = await prisma.incidentCloture.findMany({
+                where: { statut: 'NON_RESOLU' },
+                orderBy: { dateDeclaration: 'asc' }
+            });
+
+            if (!incidents || incidents.length === 0) {
+                await sock.sendMessage(jid, { text: `✅ *INCIDENTS EN COURS*\n\nAucun incident non résolu en base de données.` });
+                return true;
+            }
+
+            let msg = `🚨 *INCIDENTS NON RÉSOLUS* (${incidents.length})\n\n`;
+            for (const inc of incidents) {
+                const date = new Date(inc.dateDeclaration).toLocaleDateString('fr-FR');
+                const heure = new Date(inc.dateDeclaration).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                msg += `• ID *${inc.machineId}* = ${inc.montant} FC\n  📅 Déclaré le ${date} à ${heure}\n\n`;
+            }
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !incidents:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur lecture DB : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // 📡 COMMANDE : !statut (État en temps réel)
+    // =========================================================
+    if (texteNormalise === '!statut') {
+        try {
+            const aujourdhui = new Date();
+            aujourdhui.setHours(0, 0, 0, 0);
+
+            const rapports = await prisma.report.findMany({
+                where: { timestamp: { gte: aujourdhui } },
+                include: { manager: true },
+                orderBy: { timestamp: 'desc' }
+            });
+
+            const incidents = await prisma.incidentCloture.findMany({
+                where: { statut: 'NON_RESOLU' }
+            });
+
+            const typesRecus = [...new Set(rapports.map(r => r.type))];
+            const tousTypes = ['ouverture', 'fixture', 'details_connexion', 'fermeture', 'coffre'];
+
+            const heure = new Date().getHours();
+            let msg = `📡 *STATUT EN TEMPS RÉEL*\n_${new Date().toLocaleString('fr-FR')}_\n\n`;
+
+            msg += `📋 *Rapports du jour :*\n`;
+            for (const type of tousTypes) {
+                const recu = typesRecus.includes(type);
+                const nomJoli = type.replace(/_/g, ' ').toUpperCase();
+                msg += recu ? `✅ ${nomJoli}\n` : `❌ ${nomJoli}\n`;
+            }
+
+            msg += `\n🚨 *Incidents non résolus :* ${incidents.length === 0 ? 'Aucun ✅' : incidents.length + ' en cours ⚠️'}\n`;
+
+            if (incidents.length > 0) {
+                msg += incidents.map(i => `  • ID ${i.machineId} = ${i.montant} FC`).join('\n') + '\n';
+            }
+
+            if (rapports.length > 0) {
+                const dernier = rapports[0];
+                const nomMgr = dernier.manager?.nom || 'Inconnu';
+                const heureMsg = new Date(dernier.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                msg += `\n⏱️ *Dernier rapport :* ${dernier.type.replace(/_/g, ' ')} par *${nomMgr}* à ${heureMsg}`;
+            }
+
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !statut:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // 🔄 COMMANDE : !reset-jour (Vider rapports du jour pour tests)
+    // =========================================================
+    if (texteNormalise === '!reset-jour') {
+        try {
+            const aujourdhui = new Date();
+            aujourdhui.setHours(0, 0, 0, 0);
+
+            const supprime = await prisma.report.deleteMany({
+                where: { timestamp: { gte: aujourdhui } }
+            });
+
+            await sock.sendMessage(jid, { 
+                text: `🔄 *RESET JOURNÉE*\n\n${supprime.count} rapport(s) supprimé(s) de la DB.\nLe bot est prêt pour un nouveau test.` 
+            });
+        } catch (error) {
+            await sock.sendMessage(jid, { text: `❌ Erreur reset : ${error.message}` });
+        }
+        return true;
+    }
+
     return false; // Ce n'était pas une commande reconnue
 }
 
