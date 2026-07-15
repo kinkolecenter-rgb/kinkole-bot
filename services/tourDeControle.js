@@ -60,14 +60,6 @@ function initialiserTourDeControle(sock, etatAttenteRef) {
     // 👤 9. ESCALADE DIRECTE AU PATRON (23h59)
     // ==========================================
     cron.schedule('59 23 * * *', async () => alertePatronSilencieux(sock));
-
-    // TEST TEMPORAIRE — à supprimer après
-        const maintenant = new Date();
-        const minTest = maintenant.getMinutes() + 2;
-        cron.schedule(`${minTest} ${maintenant.getHours()} * * *`, async () => {
-            console.log("🧪 TEST : Déclenchement simulation 23h");
-            verificationClotureQuotidienne(sock, GROUPE_SYNCHRO);
-        });
 }
 
 /**
