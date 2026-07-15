@@ -32,7 +32,14 @@ function analyserRapport(texte) {
     // ==========================================
     // 2. DÉTECTION : FIXTURES & TAUX
     // ==========================================
-    else if (texteNorm.includes('fixtures sport') || texteNorm.includes('taux de change') || texteNorm.includes('taux d\'échange') || texteNorm.includes('taux') || texteNorm.includes('achat')) {
+    // Fix 3: detection resserree
+    else if (
+        texteNorm.includes('fixtures sport') ||
+        texteNorm.includes('taux de change') ||
+        (texteNorm.includes('achat') && texteNorm.includes('vente') && texteNorm.includes('taux')) ||
+        (texteNorm.includes('achat:') && texteNorm.includes('vente:')) ||
+        (texteNorm.includes('achat :') && texteNorm.includes('vente :'))
+    ) {
         type = 'fixture';
         
         const achat = texteNorm.match(/achat\s*:?\s*([\d\.,]+)/);
