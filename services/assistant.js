@@ -402,12 +402,8 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         if (!check((t, m) => (t.includes('coffre ok') || t.includes('etat coffre')) && new Date(m.timestamp).getHours() >= 14)) {
             manquantsCoffre.push('État coffre soir');
         }
-        // 🔥 DEMANDE DE L'ÉTAT DES CLÔTURES (À 23h précisément)
-        if (heure === 23) {
-            if (!check(t => t.includes('non clôturé') || t.includes('non cloture') || t.includes('rien à signaler'))) {
-                manquantsManagers.push("État des clôtures (Si tout le monde a clôturé : envoyer 'Rien à signaler', sinon lister les IDs et montants)");
-            }
-        }
+        // ℹ️ La vérification clôture à 23h est gérée exclusivement par tourDeControle.js
+        // → verificationClotureQuotidienne() pour éviter les doublons
     }
 
     // ==========================================
