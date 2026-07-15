@@ -67,6 +67,12 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         }
     };
 
+    // Fix 1 : état par conversation (confirmation fixture, etc.)
+    const etatConversation = new Map();
+    const setState = (jid, data) => etatConversation.set(jid, data);
+    const getState = (jid) => etatConversation.get(jid);
+    const resetState = (jid) => etatConversation.delete(jid);
+
     const getPeriodeHeures = (periode) => {
         const map = { '3h': 3, '6h': 6, '12h': 12, '24h': 24, '48h': 48 };
         return map[periode] || 3;
