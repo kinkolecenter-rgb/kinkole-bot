@@ -16,15 +16,9 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
 
     const send = async (txt, jid = null) => {
         try {
-            const cibles = [
-                `${config.monNumero}@s.whatsapp.net`,
-                `${config.secondaireLid}@lid`
-            ];
-            for (const cible of cibles) {
-                try {
-                    await sock.sendMessage(cible, { text: txt });
-                } catch (e) {}
-            }
+            // Fix 4 : envoi unique vers monNumero seulement (évite le double si secondaireLid = même téléphone)
+            const cible = jid || `${config.monNumero}@s.whatsapp.net`;
+            await sock.sendMessage(cible, { text: txt });
         } catch (e) {
             console.error('❌ Erreur envoi:', e.message);
         }
@@ -332,6 +326,12 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
         // Sauvegarder dans le contexte
         await contexte.ajouterEchange(jid, 'user', texte);
         await contexte.ajouterEchange(jid, 'assistant', reponse);
+
+        // Fix 16 : tronquer si trop long (limite WhatsApp ~65000 chars)
+        const MAX_WHATSAPP = 60000;
+        if (reponse.length > MAX_WHATSAPP) {
+            reponse = reponse.substring(0, MAX_WHATSAPP) + '\n\n_[Réponse tronquée — trop longue]_';
+        }
 
         await send(reponse, jid);
         return true;
