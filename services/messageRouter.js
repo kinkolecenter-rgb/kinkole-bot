@@ -4,7 +4,10 @@ const { detecterTypeRapport, verifierCompletude, getDestination } = require('./r
 const db = require('./database'); 
 const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
 const { gererCommandesPatron } = require('./menuPatron');
-const cacheOuverture = new Map(); // 🧠 Mémoire pour retenir le nombre de pages du jour
+const cacheOuverture = new Map();
+
+const GROUPE_SYNCHRO    = '120363021280044937@g.us';
+const GROUPE_DISPARUS   = '243900435187-1564716535@g.us';
 
 // Les groupes
 const NOMS_GROUPES = {
@@ -24,6 +27,14 @@ const NOMS_GROUPES = {
     '120363049897392666@g.us': 'Entre nous'
 };
 
+// =================================================================
+// 🧠 ÉTAT D'ATTENTE — gère les conversations en cours dans Synchro
+// =================================================================
+// Structure : { [groupeJid]: { etape: 'ATTENTE_REPONSE_23H' | 'ATTENTE_FORMAT', managerJid, timestamp } }
+const etatAttente = new Map();
+
+const MODELE_NON_CLOTURE = `📝 *Modèle requis :*\n\nNon clôturé\n421596 = 150000\n1363049 = 75000\n\n_(Un ID et son montant par ligne, séparés par =)_`;
+
 /**
  * Extrait le texte d'un message WhatsApp, peu importe son format
  */
@@ -35,6 +46,80 @@ function extraireTexte(msg) {
     if (m.viewOnceMessageV2?.message) return extraireTexte({ message: m.viewOnceMessageV2.message });
     if (m.documentWithCaptionMessage?.message?.documentMessage) return m.documentWithCaptionMessage.message.documentMessage.caption || '';
     return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || m.documentMessage?.caption || '';
+}
+
+/**
+ * Parse les incidents au format "ID = Montant" (une paire par ligne)
+ * Retourne [] si le format n'est pas respecté sur au moins une ligne valide
+ */
+function parserIncidentsFormat(texte) {
+    const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
+    const incidents = [];
+    const regexLigne = /^(\d{5,7})\s*[=:]\s*([\d.,]+)$/;
+
+    for (const ligne of lignes) {
+        // Ignore la ligne d'entête (ex: "Non clôturé", "Les id non cloture"...)
+        if (/non.{0,5}cl/i.test(ligne) || /les\s+id/i.test(ligne)) continue;
+        // Ignore les lignes de type "00" ou commentaires courts
+        if (/^\d{1,3}$/.test(ligne)) continue;
+
+        const match = ligne.match(regexLigne);
+        if (match) {
+            incidents.push({ id: match[1], montant: match[2] });
+        }
+    }
+
+    return incidents;
+}
+
+/**
+ * Vérifie si un texte contient des IDs sans montants (format incorrect)
+ */
+function contiendIdsSeuls(texte) {
+    const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
+    const regexIdSeul = /^\d{5,7}$/;
+    return lignes.some(l => regexIdSeul.test(l));
+}
+
+/**
+ * Traite un rapport de non-clôturé valide (enregistre + publie dans disparus)
+ */
+async function traiterIncidentsValides(sock, incidents, expediteur, participantJid) {
+    const idsEnregistres = [];
+
+    for (const inc of incidents) {
+        try {
+            await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+            idsEnregistres.push(inc.id);
+        } catch (err) {
+            console.error('Erreur DB Incident:', err.message);
+        }
+    }
+
+    // Marque la journée comme traitée (annule la question de 23h)
+    try {
+        await db.prisma.report.create({
+            data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
+        });
+    } catch (e) {}
+
+    // Message public : IDs seulement, montants cachés
+    const phraseIds = idsEnregistres.length > 1
+        ? `les ids *${idsEnregistres.join(', ')}* n'ont pas clôturé`
+        : `l'id *${idsEnregistres[0]}* n'a pas clôturé`;
+
+    await sock.sendMessage(GROUPE_DISPARUS, {
+        text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`
+    });
+
+    // Toi tu reçois avec les montants
+    const detail = incidents.map(i => `ID ${i.id} = ${i.montant}`).join('\n');
+    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+        text: `⚠️ *NON CLÔTURÉ* déclaré par *${expediteur}*\n\n${detail}\n\n✅ Enregistré en DB. IDs publiés dans Disparus.`
+    });
+
+    console.log(`✅ ${idsEnregistres.length} incident(s) traité(s) : ${idsEnregistres.join(', ')}`);
+    return idsEnregistres;
 }
 
 /**
@@ -51,13 +136,12 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         // 👑 INTERCEPTEUR : COMMANDES SECRÈTES DU PATRON (EN PRIVÉ)
         // =========================================================
         if (!jid.includes('@g.us')) { 
-            const texteBrut = extraireTexte(msg); // On extrait le texte du message
-            if (texteBrut.startsWith('!')) {      // Si le message commence par "!"
+            const texteBrut = extraireTexte(msg);
+            if (texteBrut.startsWith('!')) {
                 const commandeTraitee = await gererCommandesPatron(sock, jid, texteBrut);
-                if (commandeTraitee) continue;    // Si c'est une commande valide, on stoppe le traitement ici
+                if (commandeTraitee) continue;
             }
         }
-        // =========================================================
 
         // 1. TRAITEMENT DES MESSAGES DE GROUPES
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
@@ -99,14 +183,13 @@ async function lancerRattrapageAutomatique(sock, db) {
                     if (typeLocal === 'ouverture') {
                         await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: msg.texte });
                         const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
-                        await sock.sendMessage('120363021280044937@g.us', { text: demandeFixture });
+                        await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
                     }
                     else if (typeLocal === 'fixture') {
                         const d = analyse.donnees || {};
                         const pages = 8;
                         const copiesParAgent = 2;
                         const totalParAgent = (pages * copiesParAgent) + (d.loto || 0) + (d.giga || 0) + (d.felicitation || 0);
-
                         const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\nNb. Pages: ${pages}\nNb.Copies par agent: ${copiesParAgent}\nFixture (other)\nloto: ${d.loto || 0}\nGiga: ${d.giga || 0}\nFélicitation : ${d.felicitation || 0}\nTotal/agt: ${totalParAgent}\n----------------\nTaux de change\nAchat: ${d.taux_achat || '?'}\nVente: ${d.taux_vente || '?'}`;
                         await sock.sendMessage(config.groupesDestination.rate_fixture.id, { text: rapportFixtureFinal });
                     }
@@ -145,15 +228,14 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         participantJid.includes(config.secondaireNumero) || 
         participantJid === config.monLid || 
         participantJid === config.secondaireLid ||
-        participantJid === '204685424214253@lid' // Ton LID principal
+        participantJid === '204685424214253@lid'
     );
 
-    const estDansSynchro = (jid === '120363021280044937@g.us');
+    const estDansSynchro = (jid === GROUPE_SYNCHRO);
 
     if (!estDansSynchro && !estManagerAutorise && !estPatron) {
         return; 
     }
-    // ==========================================
 
     const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
     const texteBrut = extraireTexte(msg);
@@ -177,116 +259,162 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
     } catch (e) {}
 
-    // =================================================================
-    // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE (PLUGUÉ ICI - ULTRA PRIORITAIRE)
-    // =================================================================
-    
-    // =================================================================
-    // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE (PLUGUÉ ICI - ULTRA PRIORITAIRE)
-    // =================================================================
-    
-    // 1. CONDITIONS STRICTES DE DÉTECTION (Fini les fausses alertes !)
-    const estNonCloture = texteNormalise.includes('non cloture') || 
-                          texteNormalise.includes('non clôture') || 
-                          texteNormalise.includes('pas cloture') || 
-                          texteNormalise.includes('pas clôturé') || 
-                          texteNormalise.includes('pas cloturer');
-
-    const estResolution = texteNormalise.includes('resolu') || texteNormalise.includes('résolu');
-    
-    const estBilanOk = texteNormalise === 'oui' || texteNormalise === 'tout est ok' || texteNormalise.includes('cloture ok') || texteNormalise.includes('clôture normale') || texteNormalise.includes('tout le monde a cloture');
-
-    // 🕒 Calcul du "Couvre-feu" : L'envoi public n'est autorisé qu'entre 22h et 4h du matin
     const heureActuelle = new Date().getHours();
-    const fenetreCloture = (heureActuelle >= 22 || heureActuelle < 4);
 
-    // ==========================================
-    // 🔴 CAS A : DECLARATION D'UN NON-CLÔTURÉ
-    // ==========================================
-    if (estNonCloture) {
-        const regexIdMontant = /\b(\d{5,7})\s*[=:]\s*([\d.,]+)/g;
-        let matchId;
-        const incidentsDetectes = [];
-        
-        while ((matchId = regexIdMontant.exec(texteBrut)) !== null) {
-            incidentsDetectes.push({ id: matchId[1], montant: matchId[2] });
+    // =================================================================
+    // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE — UNIQUEMENT DANS SYNCHRO
+    // =================================================================
+    if (estDansSynchro) {
+
+        // ⛔ Rapports légitimes qui contiennent des IDs+montants mais ne sont PAS des non-clôturés
+        const estRapportAutre = (
+            texteNormalise.includes('reste caution') ||
+            texteNormalise.includes('rapport reste') ||
+            texteNormalise.includes('ticket') ||
+            texteNormalise.includes('instant win') ||
+            texteNormalise.includes('number games') ||
+            texteNormalise.includes('ids plus') ||
+            texteNormalise.includes('ids moins') ||
+            texteNormalise.includes('loto') ||
+            texteNormalise.includes('fixture')
+        );
+
+        const estNonCloture = !estRapportAutre && (
+            texteNormalise.includes('non cloture') || 
+            texteNormalise.includes('non clôture') || 
+            texteNormalise.includes('pas cloture') || 
+            texteNormalise.includes('pas clôturé') || 
+            texteNormalise.includes('pas cloturer') ||
+            texteNormalise.includes('id non') ||
+            texteNormalise.includes('les id non')
+        );
+
+        const estResolution = texteNormalise.includes('resolu') || texteNormalise.includes('résolu');
+
+        const estBilanOk = texteNormalise === 'oui' || 
+                           texteNormalise.includes('tout est ok') || 
+                           texteNormalise.includes('cloture ok') || 
+                           texteNormalise.includes('clôture normale') || 
+                           texteNormalise.includes('tout le monde a cloture') ||
+                           texteNormalise.includes('rien a signaler');
+
+        // ─────────────────────────────────────────────────────────
+        // 🔵 CAS 0 : ON EST EN ATTENTE D'UNE RÉPONSE (état actif)
+        // ─────────────────────────────────────────────────────────
+        const attente = etatAttente.get(jid);
+        if (attente) {
+
+            // ÉTAPE A : On attendait "oui/non/IDs" après la question de 23h
+            if (attente.etape === 'ATTENTE_REPONSE_23H') {
+
+                if (estBilanOk) {
+                    // ✅ Tout est ok → on ferme la journée
+                    try {
+                        await db.prisma.report.create({
+                            data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
+                        });
+                    } catch (e) {}
+                    etatAttente.delete(jid);
+                    await sock.sendMessage(jid, { text: `✅ Parfait, merci *${expediteur}*. Bonne fin de journée à toute l'équipe !` });
+                    return;
+                }
+
+                if (estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut))) {
+                    // Le manager signale des non-clôturés → vérifier le format
+                    const incidents = parserIncidentsFormat(texteBrut);
+
+                    if (incidents.length > 0) {
+                        // ✅ Format correct
+                        etatAttente.delete(jid);
+                        await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                    } else {
+                        // ❌ Format incorrect → demander la correction
+                        etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
+                        await sock.sendMessage(jid, {
+                            text: `⚠️ Format incorrect. Je ne peux pas enregistrer sans les montants.\n\n${MODELE_NON_CLOTURE}`
+                        });
+                    }
+                    return;
+                }
+
+                // Réponse non reconnue
+                await sock.sendMessage(jid, {
+                    text: `❓ Je n'ai pas compris. Répondez :\n• *"Tout est ok"* si tout le monde a clôturé\n• Ou envoyez la liste des IDs non clôturés avec le modèle ci-dessous\n\n${MODELE_NON_CLOTURE}`
+                });
+                return;
+            }
+
+            // ÉTAPE B : On attendait la correction du format
+            if (attente.etape === 'ATTENTE_FORMAT') {
+                const incidents = parserIncidentsFormat(texteBrut);
+
+                if (incidents.length > 0) {
+                    // ✅ Format corrigé
+                    etatAttente.delete(jid);
+                    await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                } else {
+                    // ❌ Toujours incorrect
+                    await sock.sendMessage(jid, {
+                        text: `⚠️ Format encore incorrect. Merci de respecter exactement le modèle :\n\n${MODELE_NON_CLOTURE}`
+                    });
+                }
+                return;
+            }
         }
 
-        if (incidentsDetectes.length > 0) {
-            const idsEnregistres = [];
-            
-            // Sauvegarde en DB
-            for (const inc of incidentsDetectes) {
-                try {
-                    await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
-                    idsEnregistres.push(inc.id);
-                } catch (err) { console.error('Erreur DB Incident:', err.message); }
+        // ─────────────────────────────────────────────────────────
+        // 🔴 CAS A : NON-CLÔTURÉ ENVOYÉ EN ANTICIPATION (avant 23h)
+        // ─────────────────────────────────────────────────────────
+        if (estNonCloture || (!estRapportAutre && heureActuelle >= 22 && contiendIdsSeuls(texteBrut))) {
+            const incidents = parserIncidentsFormat(texteBrut);
+
+            if (incidents.length > 0) {
+                // ✅ Format correct → traitement immédiat
+                await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+            } else {
+                // ❌ Format incorrect → on demande la correction et on attend
+                etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
+                await sock.sendMessage(jid, {
+                    text: `⚠️ J'ai bien capté le rapport de non-clôturé, mais le format est incorrect.\n\nJe ne peux pas enregistrer et publier sans les montants.\n\n${MODELE_NON_CLOTURE}`
+                });
             }
+            return;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // 🟢 CAS B : RÉSOLUTION D'UN INCIDENT
+        // ─────────────────────────────────────────────────────────
+        if (estResolution) {
+            const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
             
+            if (idsResolus && idsResolus.length > 0) {
+                for (const machineId of idsResolus) {
+                    try { await db.marquerIncidentResolu(machineId); } catch (err) {}
+                }
+                
+                const phraseResolution = idsResolus.length > 1 
+                    ? `les ids ${idsResolus.join(', ')} — problème résolu ✅` 
+                    : `l'id ${idsResolus[0]} — problème résolu ✅`;
+
+                await sock.sendMessage(GROUPE_DISPARUS, { text: `✅ Mise à jour : ${phraseResolution}` });
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Incident(s) clos en DB : ${idsResolus.join(', ')}` });
+                return;
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // 🔵 CAS C : TOUT EST OK (sans état d'attente actif)
+        // ─────────────────────────────────────────────────────────
+        if (estBilanOk) {
             try {
                 await db.prisma.report.create({
-                    data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
+                    data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
                 });
-            } catch (error) {}
-
-            const phraseIds = idsEnregistres.length > 1 
-                ? `les ids ${idsEnregistres.join(', ')} n'ont pas cloturé` 
-                : `l'id ${idsEnregistres[0]} n'a pas cloturé`;
-
-            const messagePublic = `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`;
-
-            // 🛑 VÉRIFICATION DE L'HEURE : On publie dans le groupe UNIQUEMENT si on est dans la fenêtre 22h-4h
-            if (fenetreCloture) {
-                await sock.sendMessage('243900435187-1564716535@g.us', { text: messagePublic });
-            }
-
-            // 🔔 Toi, tu reçois l'alerte en privé dans TOUS LES CAS, avec le montant et l'état d'envoi.
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `⚠️ *RAPPORT NON CLÔTURÉ* de *${expediteur}*.\n(DB validée. Envoi public : ${fenetreCloture ? "✅ OUI" : "❌ NON - Hors Heure"})` 
-            });
-            return; 
-        }
-    }
-
-    // ==========================================
-    // 🟢 CAS B : RÉSOLUTION D'UN INCIDENT (Permis à toute heure)
-    // ==========================================
-    if (estResolution) {
-        const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
-        
-        if (idsResolus && idsResolus.length > 0) {
-            for (const machineId of idsResolus) {
-                try { await db.marquerIncidentResolu(machineId); } catch (err) {}
-            }
-            
-            const phraseResolution = idsResolus.length > 1 
-                ? `les ids ${idsResolus.join(', ')} le probleme est resolu` 
-                : `l'id ${idsResolus[0]} le probleme est resolu`;
-
-            // On publie toujours la résolution dans le groupe !
-            await sock.sendMessage('243900435187-1564716535@g.us', { text: `✅ Mise à jour : ${phraseResolution}` });
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Incident clos en DB pour : ${idsResolus.join(', ')}` });
+            } catch (e) {}
+            await sock.sendMessage(jid, { text: `✅ Merci *${expediteur}*, bonne fin de journée !` });
             return;
         }
     }
-
-    // ==========================================
-    // 🔵 CAS C : TOUT EST OK
-    // ==========================================
-    if (estBilanOk) {
-        try {
-            await db.upsertManager(participantJid, expediteur || 'Manager Inconnu');
-            await db.prisma.report.create({
-                data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
-            });
-        } catch (error) {}
-
-        await sock.sendMessage(jid, { text: `✅ Merci, bien reçu. Bonne fin de journée !` });
-        return;
-    }
-    // =================================================================
-    
-    
     // =================================================================
 
     // ── DÉTECTION DES AUTRES RAPPORTS STANDARDS (OUVERTURE, FIXTURE...) ──
@@ -339,30 +467,24 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 console.error('⚠️ Erreur écriture DB:', e.message);
             }
 
-            // ==========================================
             // ⚙️ WORKFLOW 1 : OUVERTURE
-            // ==========================================
             if (typeLocal === 'ouverture') {
                 const pages = analyseLocale.donnees?.pages_imprimees || 8;
                 cacheOuverture.set('pages_kinkole', pages);
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
                 
-                const heureActuelle = new Date().getHours();
                 if (heureActuelle < 10) {
                     const demandeFixture = `✅ Ouverture validée.\n\nIl me manque les informations suivantes pour calculer les fixtures :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
-                    await sock.sendMessage('120363021280044937@g.us', { text: demandeFixture });
+                    await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
                 }
                 return;
             }
 
-            // ==========================================
             // ⚙️ WORKFLOW 2 : CALCUL DES FIXTURES
-            // ==========================================
             else if (typeLocal === 'fixture') {
                 const d = analyseLocale.donnees || {};
                 const pages = cacheOuverture.get('pages_kinkole') || 8; 
                 const copiesParAgent = 2;
-                
                 const loto = d.loto || 0;
                 const giga = d.giga || 0;
                 const felicitation = d.felicitation || 0;
@@ -386,9 +508,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 return;
             }
 
-            // ==========================================
             // ⚙️ WORKFLOW 3 : FERMETURE
-            // ==========================================
             else if (typeLocal === 'fermeture') {
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
@@ -397,9 +517,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 return;
             }
 
-            // ==========================================
             // ⚙️ WORKFLOW 4 : DÉTAILS CONNEXION
-            // ==========================================
             else if (typeLocal === 'details_connexion') {
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
@@ -408,9 +526,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 return;
             }
 
-            // ==========================================
             // ⚙️ WORKFLOW CLASSIQUE
-            // ==========================================
             else {
                 const destination = getDestination(typeLocal);
                 const groupeDest = destination ? config.groupesDestination[destination] : null;
@@ -467,6 +583,7 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
             return;
         }
     }
+
     if (texte.trim().toUpperCase() === 'PING') {
         await sock.sendMessage(jid, { text: 'PONG ✅' });
         return;
@@ -488,8 +605,10 @@ async function gererMessagePrive(sock, msg, jid, assistant) {
     }
 }
 
+// Export de etatAttente pour que tourDeControle.js puisse activer l'état d'attente
 module.exports = {
     handleIncomingMessage,
     gererMessageGroupe,
-    lancerRattrapageAutomatique
+    lancerRattrapageAutomatique,
+    etatAttente  // ← tourDeControle l'utilise pour déclencher ATTENTE_REPONSE_23H
 };
