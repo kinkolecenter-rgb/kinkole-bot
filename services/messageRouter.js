@@ -46,8 +46,9 @@ const NOMS_GROUPES = {
 // Structure : { [groupeJid]: { etape: 'ATTENTE_REPONSE_23H' | 'ATTENTE_FORMAT', managerJid, timestamp } }
 const etatAttente = new Map();
 const EXPIRATION_ATTENTE_MS = 2 * 60 * 60 * 1000; // 2 heures
+const CLE_REDIS_ATTENTE = 'etat_attente_synchro';
 
-// Nettoyage automatique des états expirés (toutes les 30 min)
+// Nettoyage automatique des états expirés en mémoire (toutes les 30 min)
 setInterval(() => {
     const maintenant = Date.now();
     for (const [jid, etat] of etatAttente.entries()) {
@@ -57,6 +58,33 @@ setInterval(() => {
         }
     }
 }, 30 * 60 * 1000);
+
+// Fix 5 : persistance Redis pour survivre aux redémarrages
+async function sauvegarderEtatAttente(memoire) {
+    try {
+        const data = {};
+        for (const [jid, etat] of etatAttente.entries()) {
+            data[jid] = etat;
+        }
+        await memoire.redis.set(CLE_REDIS_ATTENTE, JSON.stringify(data), { ex: 7200 }); // expire 2h
+    } catch (e) { console.error('⚠️ Erreur sauvegarde etatAttente Redis:', e.message); }
+}
+
+async function chargerEtatAttente(memoire) {
+    try {
+        const raw = await memoire.redis.get(CLE_REDIS_ATTENTE);
+        if (raw) {
+            const data = JSON.parse(raw);
+            for (const [jid, etat] of Object.entries(data)) {
+                // Ne pas charger les états expirés
+                if (Date.now() - etat.timestamp < EXPIRATION_ATTENTE_MS) {
+                    etatAttente.set(jid, etat);
+                }
+            }
+            console.log(`✅ État d'attente rechargé depuis Redis : ${etatAttente.size} entrée(s)`);
+        }
+    } catch (e) { console.error('⚠️ Erreur chargement etatAttente Redis:', e.message); }
+}
 
 const MODELE_NON_CLOTURE = `📝 *Modèle requis :*\n\nNon clôturé\n421596 = 150000\n1363049 = 75000\n\n_(Un ID et son montant par ligne, séparés par =)_`;
 
@@ -153,6 +181,12 @@ async function traiterIncidentsValides(sock, incidents, expediteur, participantJ
 async function handleIncomingMessage(sock, { messages, type }, memoire, assistant) {
     if (type !== 'notify') return;
 
+    // Fix 5 : charger l'état depuis Redis au premier message (une seule fois)
+    if (!handleIncomingMessage._redisCharge) {
+        await chargerEtatAttente(memoire);
+        handleIncomingMessage._redisCharge = true;
+    }
+
     for (const msg of messages) {
         if (msg.key.fromMe) continue;
         const jid = msg.key.remoteJid;
@@ -168,9 +202,27 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
             }
         }
 
-        // 1. TRAITEMENT DES MESSAGES DE GROUPES
+        // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
+            continue;
+        }
+
+        // Fix 17 : intercepter "résolu" dans le groupe Disparus
+        if (jid === GROUPE_DISPARUS) {
+            const texteBrut = extraireTexte(msg);
+            const texteNorm = (texteBrut || '').toLowerCase();
+            if (texteNorm.includes('resolu') || texteNorm.includes('résolu')) {
+                const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
+                if (idsResolus && idsResolus.length > 0) {
+                    for (const machineId of idsResolus) {
+                        try { await db.marquerIncidentResolu(machineId); } catch (e) {}
+                    }
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                        text: `✅ Résolution capturée depuis Disparus : IDs ${idsResolus.join(', ')} marqués résolus en DB.`
+                    });
+                }
+            }
             continue;
         }
 
@@ -355,6 +407,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     } else {
                         // ❌ Format incorrect → demander la correction
                         etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
+                        await sauvegarderEtatAttente(memoire);
                         await sock.sendMessage(jid, {
                             text: `⚠️ Format incorrect. Je ne peux pas enregistrer sans les montants.\n\n${MODELE_NON_CLOTURE}`
                         });
@@ -399,6 +452,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             } else {
                 // ❌ Format incorrect → on demande la correction et on attend
                 etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
+                await sauvegarderEtatAttente(memoire);
                 await sock.sendMessage(jid, {
                     text: `⚠️ J'ai bien capté le rapport de non-clôturé, mais le format est incorrect.\n\nJe ne peux pas enregistrer et publier sans les montants.\n\n${MODELE_NON_CLOTURE}`
                 });
