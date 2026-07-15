@@ -195,36 +195,24 @@ async function lancerRattrapageAutomatique(sock, db) {
 
             for (const msg of messagesRata) {
                 if (!msg.texte) continue;
-
+                
                 const { analyserRapport } = require('./reportEngine'); 
                 const analyse = analyserRapport(msg.texte);
                 const typeLocal = analyse.type;
 
                 if (typeLocal !== 'inconnu') {
-                    // ✅ ANTI-DOUBLON : si ce type a déjà été traité aujourd'hui, on skip
-                    const dejaEnvoye = await db.getReportsAujourdhui(typeLocal);
-                    if (dejaEnvoye && dejaEnvoye.length > 0) {
-                        console.log(`⏭️ Rattrapage ignoré : [${typeLocal}] déjà traité aujourd'hui.`);
-                        await db.marquerMessageTraite(msg.id); // marquer pour ne plus le revoir
-                        continue;
-                    }
-
                     try {
                         await db.sauvegarderReport(typeLocal, analyse.donnees || {}, msg.senderJid, true, null);
                     } catch (e) {}
 
                     if (typeLocal === 'ouverture') {
                         await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: msg.texte });
-                        // Demande fixture seulement si pas encore reçue aujourd'hui
-                        const fixtureDuJour = await db.getReportsAujourdhui('fixture');
-                        if (!fixtureDuJour || fixtureDuJour.length === 0) {
-                            const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
-                            await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
-                        }
+                        const demandeFixture = `✅ Ouverture validée (Rattrapage automatique).\n\nIl me manque les informations :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
+                        await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
                     }
                     else if (typeLocal === 'fixture') {
                         const d = analyse.donnees || {};
-                        const pages = await getCachePages();
+                        const pages = 8;
                         const copiesParAgent = 2;
                         const totalParAgent = (pages * copiesParAgent) + (d.loto || 0) + (d.giga || 0) + (d.felicitation || 0);
                         const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\nNb. Pages: ${pages}\nNb.Copies par agent: ${copiesParAgent}\nFixture (other)\nloto: ${d.loto || 0}\nGiga: ${d.giga || 0}\nFélicitation : ${d.felicitation || 0}\nTotal/agt: ${totalParAgent}\n----------------\nTaux de change\nAchat: ${d.taux_achat || '?'}\nVente: ${d.taux_vente || '?'}`;
@@ -242,6 +230,7 @@ async function lancerRattrapageAutomatique(sock, db) {
         }
     }, 15 * 60 * 1000); 
 }
+
 /**
  * Gère la logique des messages reçus dans les groupes
  */
@@ -505,13 +494,27 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
             // ⚙️ WORKFLOW 1 : OUVERTURE
             if (typeLocal === 'ouverture') {
-                const pages = analyseLocale.donnees?.pages_imprimees || 8;
-                cacheOuverture.set('pages_kinkole', pages);
+                const pages = analyseLocale.donnees?.pages_imprimees;
+                cacheOuverture.set('pages_kinkole', pages || 8);
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
-                
+
+                // Fix 10 : accusé réception visible dans Synchro
+                await sock.sendMessage(jid, { text: `✅ *Ouverture reçue* — rapport transféré dans Gestion Center.` });
+
+                // Fix 14 : avertir si pages manquantes
+                if (!pages) {
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                        text: `⚠️ *Rapport ouverture reçu mais le nombre de pages est absent.*\n\nLe calcul fixture utilisera 8 pages par défaut.\n\nDemande à ${expediteur} de préciser "Pages : X" dans son prochain rapport.`
+                    });
+                }
+
+                // Fix doublon : ne demander les taux que si pas encore reçus aujourd'hui
                 if (heureActuelle < 10) {
-                    const demandeFixture = `✅ Ouverture validée.\n\nIl me manque les informations suivantes pour calculer les fixtures :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
-                    await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
+                    const fixturesDuJour = await db.getReportsAujourdhui('fixture');
+                    if (!fixturesDuJour || fixturesDuJour.length === 0) {
+                        const demandeFixture = `✅ Ouverture validée.\n\nIl me manque les informations suivantes pour calculer les fixtures :\n• Taux d'achat USD\n• Taux de vente USD\n• Loto\n• Giga\n• Félicitations\n\n📝 *Modèle à utiliser :*\nTaux de change\nAchat: \nVente: \nLoto: \nGiga: \nFélicitation: `;
+                        await sock.sendMessage(GROUPE_SYNCHRO, { text: demandeFixture });
+                    }
                 }
                 return;
             }
@@ -540,15 +543,18 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                                             `Vente: ${d.taux_vente || '?'}`;
 
                 await sock.sendMessage(config.groupesDestination.rate_fixture.id, { text: rapportFixtureFinal });
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Fixture calculée et publiée avec succès !` });
+                // Fix 10 : accusé réception dans Synchro
+                await sock.sendMessage(jid, { text: `✅ *Fixtures calculées et publiées* dans Rates & Fixtures.` });
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Fixture calculée et publiée avec succès par *${expediteur}* !` });
                 return;
             }
 
             // ⚙️ WORKFLOW 3 : FERMETURE
             else if (typeLocal === 'fermeture') {
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                await sock.sendMessage(jid, { text: `✅ *Dernier rapport reçu* — transféré dans Gestion Center.` });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `✅ *DERNIER RAPPORT* de *${manager.nom}* validé et transféré dans *Gestion Center*.` 
+                    text: `✅ *DERNIER RAPPORT* de *${expediteur}* validé et transféré dans *Gestion Center*.` 
                 });
                 return;
             }
@@ -556,8 +562,9 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             // ⚙️ WORKFLOW 4 : DÉTAILS CONNEXION
             else if (typeLocal === 'details_connexion') {
                 await sock.sendMessage(config.groupesDestination.gestion_center.id, { text: texteBrut });
+                await sock.sendMessage(jid, { text: `✅ *Détails connexion reçus* — transférés dans Gestion Center.` });
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `✅ *DÉTAILS CONNEXION* de *${manager.nom}* transféré dans *Gestion Center*.` 
+                    text: `✅ *DÉTAILS CONNEXION* de *${expediteur}* transféré dans *Gestion Center*.` 
                 });
                 return;
             }
