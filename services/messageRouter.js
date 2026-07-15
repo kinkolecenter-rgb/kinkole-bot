@@ -366,7 +366,10 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         // ─────────────────────────────────────────────────────────
         // 🔴 CAS A : NON-CLÔTURÉ ENVOYÉ EN ANTICIPATION (avant 23h)
         // ─────────────────────────────────────────────────────────
-        if (estNonCloture || (!estRapportAutre && heureActuelle >= 22 && contiendIdsSeuls(texteBrut))) {
+        const estFormatValide = parserIncidentsFormat(texteBrut).length > 0;
+        const estDansFeretreNuit = (heureActuelle >= 22 || heureActuelle < 4);
+        
+        if (estNonCloture || (!estRapportAutre && estDansFeretreNuit && (contiendIdsSeuls(texteBrut) || estFormatValide))) {
             const incidents = parserIncidentsFormat(texteBrut);
 
             if (incidents.length > 0) {
