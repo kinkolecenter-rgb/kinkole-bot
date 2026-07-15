@@ -73,6 +73,63 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
     }
 
     // =========================================================
+    // 📅 COMMANDE : !semaine (Résumé des 7 derniers jours)
+    // =========================================================
+    if (texteNormalise === '!semaine') {
+        await sock.sendMessage(jid, { text: "⏳ *Génération du Bilan Hebdomadaire...*" });
+        try {
+            const il7Jours = new Date();
+            il7Jours.setDate(il7Jours.getDate() - 7);
+            il7Jours.setHours(0, 0, 0, 0);
+
+            const rapports = await prisma.report.findMany({
+                where: { timestamp: { gte: il7Jours } },
+                include: { manager: true },
+                orderBy: { timestamp: 'asc' }
+            });
+
+            if (rapports.length === 0) {
+                await sock.sendMessage(jid, { text: `📅 *BILAN HEBDOMADAIRE*\n\nAucun rapport sur les 7 derniers jours.` });
+                return true;
+            }
+
+            // Grouper par jour
+            const parJour = {};
+            for (const r of rapports) {
+                const jour = new Date(r.timestamp).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+                if (!parJour[jour]) parJour[jour] = {};
+                const type = r.type.replace(/_/g, ' ').toUpperCase();
+                parJour[jour][type] = (parJour[jour][type] || 0) + 1;
+            }
+
+            // Incidents non résolus de la semaine
+            const incidents = await prisma.incidentCloture.findMany({
+                where: { dateDeclaration: { gte: il7Jours } }
+            });
+            const nonResolus = incidents.filter(i => i.statut === 'NON_RESOLU').length;
+            const resolus = incidents.filter(i => i.statut === 'RESOLU').length;
+
+            let msg = `📅 *BILAN HEBDOMADAIRE*\n_7 derniers jours_\n\n`;
+            for (const [jour, types] of Object.entries(parJour)) {
+                msg += `📆 *${jour}*\n`;
+                for (const [type, count] of Object.entries(types)) {
+                    msg += `  ▪️ ${type} (x${count})\n`;
+                }
+                msg += '\n';
+            }
+            msg += `─────────────────\n`;
+            msg += `📊 *Total rapports :* ${rapports.length}\n`;
+            msg += `🚨 *Incidents déclarés :* ${incidents.length} (${resolus} résolus, ${nonResolus} en cours)`;
+
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !semaine:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
     // 🚨 COMMANDE : !incidents (IDs non résolus en DB)
     // =========================================================
     if (texteNormalise === '!incidents') {
