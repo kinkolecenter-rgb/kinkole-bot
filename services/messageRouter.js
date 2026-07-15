@@ -219,7 +219,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         '42967356150013@lid',  // Timothé Le Noir
         '265515029283001@lid', // Deborah Kavunga
         '90263603159168@lid',  // Trésor bk
-        '169230989307948@lid'  // Erick kenzo (Eric pos man)
+        '169230989307948@lid',  // Erick kenzo (Eric pos man)
          '138277243904251@lid'  // Dimercia
     ];
     const estManagerAutorise = MANAGERS_AUTORISES.includes(participantJid);
