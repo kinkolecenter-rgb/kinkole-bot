@@ -29,7 +29,8 @@ module.exports = function creerGestionnaireManagers(redis) {
             await redis.expire(CLE_ACTIVITE(managerJid), TTL);
 
             // Dernière activité (timestamp simple)
-            await redis.set(CLE_DERNIER(managerJid), Date.now(), { ex: TTL });
+            //await redis.set(CLE_DERNIER(managerJid), Date.now(), { ex: TTL });
+            await redis.set(CLE_DERNIER(managerJid), Date.now(), 'EX', TTL);
 
             // Stats
             await incrementerStat(managerJid, 'messages_total');
