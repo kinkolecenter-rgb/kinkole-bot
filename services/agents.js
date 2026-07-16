@@ -1,8 +1,6 @@
 const config = require('../config');
+const { genererBriefLocal, resumerIncidents } = require('./analyseur');
 
-//const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-//const MODEL = 'llama-3.3-70b-versatile';
-//const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SYSTEM_WINNER_BET = `Tu es KINKOLE AI, le bras droit numérique du Center Manager de Winner Bet Kinkole (RDC).
@@ -56,18 +54,17 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 - disparu, viré & no cloturé : agents problèmes
 
 # RÈGLES DE RÉPONSE
-
 1. Toujours en français
 2. Ne jamais inventer — si info manquante, le dire clairement
 3. ADAPTE le format à la question :
-   - Question simple ("as-tu envoyé des rapports ?") → réponse directe courte
+   - Question simple → réponse directe courte
    - Demande de bilan → format structuré avec émojis
    - Demande de chiffres → liste concise
    - Demande d'action → recommandation directe
-4. Maximum 400 mots
+4. Maximum 500 mots
 5. Distinguer incident ouvert vs résolu
 6. Utilise l'historique de conversation pour répondre avec cohérence
-7. Si la question fait référence à un échange précédent, tiens-en compte
+7. Heure locale : Africa/Kinshasa (UTC+1)
 
 # FORMAT BILAN (uniquement pour les briefs et bilans)
 🟢/🟡/🔴 [État général en une phrase]
@@ -77,20 +74,21 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 🎯 MES RECOMMANDATIONS
 🏁 DÉCISION SUGGÉRÉE`;
 
-// ============ APPEL GROQ AVEC HISTORIQUE ============
+// ✅ Fix 10 : modèles réordonnés du plus capable au moins capable
+// ✅ Fix 11 : max_tokens porté à 1000
 async function appelerIA(systemPrompt, messages, historique = []) {
     const modeles = [
-    'meta-llama/llama-3.1-8b-instruct:free',
-    'meta-llama/llama-3.2-3b-instruct:free',
-    'meta-llama/llama-3.2-1b-instruct:free',
-    'google/gemma-3-27b-it:free',
-    'google/gemma-3-12b-it:free',
-    'google/gemma-3-4b-it:free',
-    'mistralai/mistral-7b-instruct:free',
-    'qwen/qwen-2.5-7b-instruct:free',
-    'deepseek/deepseek-r1-distill-llama-70b:free',
-    'microsoft/phi-3-mini-128k-instruct:free'
-];
+        'deepseek/deepseek-r1-distill-llama-70b:free',  // 70B — meilleur
+        'google/gemma-3-27b-it:free',                    // 27B
+        'qwen/qwen-2.5-7b-instruct:free',               // bon rapport qualité/dispo
+        'google/gemma-3-12b-it:free',
+        'mistralai/mistral-7b-instruct:free',
+        'meta-llama/llama-3.1-8b-instruct:free',
+        'google/gemma-3-4b-it:free',
+        'meta-llama/llama-3.2-3b-instruct:free',
+        'meta-llama/llama-3.2-1b-instruct:free',
+        'microsoft/phi-3-mini-128k-instruct:free'
+    ];
 
     for (const model of modeles) {
         try {
@@ -103,7 +101,7 @@ async function appelerIA(systemPrompt, messages, historique = []) {
                 },
                 body: JSON.stringify({
                     model,
-                    max_tokens: 600,
+                    max_tokens: 1000,  // ✅ Fix 11
                     temperature: 0.1,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -122,23 +120,26 @@ async function appelerIA(systemPrompt, messages, historique = []) {
             console.log(`⚠️ Erreur ${model}:`, e.message);
         }
     }
-    return '❌ Tous les services IA sont temporairement indisponibles.';
+    return null; // ✅ Retourne null au lieu du message d'erreur — le caller gère le fallback
 }
 
-// ============ FORMATER MESSAGES STRUCTURÉS ============
+// ✅ Fix 9 : enrichir les messages avec catégorie avant formatage
 function formaterMessagesStructures(messages) {
     if (!messages || messages.length === 0) return 'Aucun message disponible.';
 
     return messages.map(m => {
-        const heure = new Date(m.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-        const cat = m.categorie ? `[${m.categorie.toUpperCase()}]` : '';
-        const prio = m.priorite ? m.priorite.emoji : '';
-        return `${prio}${cat} ${heure} | ${m.groupeNom} | ${m.expediteur}: ${m.texte}`;
+        const heure = new Date(m.timestamp).toLocaleTimeString('fr-FR', {
+            hour: '2-digit', minute: '2-digit',
+            timeZone: 'Africa/Kinshasa'
+        });
+        const cat = m.categorie ? `[${m.categorie.toUpperCase()}]` : '[INFO]';
+        const prio = m.priorite?.emoji || '⚪';
+        const texte = (m.texte || '').substring(0, 300); // limiter la longueur par message
+        return `${prio}${cat} ${heure} | ${m.groupeNom || 'Groupe'} | ${m.expediteur || '?'}: ${texte}`;
     }).join('\n');
 }
 
 // ============ AGENT INTENTION ============
-// Comprend ce que veut le manager en langage naturel
 async function agentIntention(texte, historique = []) {
     const prompt = `Tu es un routeur d'intentions pour KINKOLE AI.
 
@@ -162,25 +163,17 @@ RÈGLES DE ROUTAGE :
 - incidents : demande d'urgences/problèmes ("y a-t-il des urgences", "incidents", "pannes")
 - performance : évaluation d'un manager spécifique ("comment travaille Eric", "performance")
 - rapport : générer un rapport formel ("prépare un rapport", "rapport journalier")
-- recherche : question précise sur un fait ("combien de rapports", "qui a envoyé", "as-tu envoyé", "quel manager", "combien de tickets")
+- recherche : question précise sur un fait ("combien de rapports", "qui a envoyé", "as-tu envoyé")
 - recommandation : demande de conseil ("que recommandes-tu", "que faire")
 - reset : effacer historique
 
-IMPORTANT : Les questions précises avec "combien", "qui", "as-tu", "quel" → toujours RECHERCHE, jamais brief.
+IMPORTANT : "combien", "qui", "as-tu", "quel" → toujours RECHERCHE.`;
 
-Exemples :
-- "Comment se passe mon centre ?" → brief
-- "Que s'est-il passé ce matin ?" → brief
-- "Combien de rapports envoyés ?" → recherche
-- "As-tu envoyé des rapports ?" → recherche
-- "Qui a clôturé ?" → recherche
-- "Y a-t-il des urgences ?" → incidents
-- "Comment travaille Eric ?" → performance, manager=Eric
-- "Prépare un rapport journalier" → rapport`;
+    const resultat = await appelerIA(prompt, [{ role: 'user', content: texte }], historique);
 
-    const resultat = await appelerIA(prompt, [
-        { role: 'user', content: texte }
-    ], historique);
+    if (!resultat) {
+        return { intention: 'inconnu', parametres: { question: texte }, confiance: 0.1 };
+    }
 
     try {
         const clean = resultat.replace(/```json|```/g, '').trim();
@@ -191,9 +184,10 @@ Exemples :
 }
 
 // ============ AGENT INCIDENTS ============
+// ✅ Fix 8 : fallback local si IA indisponible
 async function agentIncidents(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -201,12 +195,15 @@ async function agentIncidents(messages, historique = []) {
         }],
         historique
     );
+    // Fallback local
+    if (!reponse) return resumerIncidents(messages);
+    return reponse;
 }
 
 // ============ AGENT RAPPORTS ============
 async function agentRapports(messages, typeRapport, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -214,13 +211,15 @@ async function agentRapports(messages, typeRapport, historique = []) {
         }],
         historique
     );
+    if (!reponse) return `📋 *Rapport ${typeRapport}*\n\n_IA indisponible — génération automatique impossible. Voici les ${messages.length} messages de la période._`;
+    return reponse;
 }
 
 // ============ AGENT PERFORMANCE ============
 async function agentPerformance(messages, nomManager = null, historique = []) {
     const contexte = formaterMessagesStructures(messages);
     const cible = nomManager ? `du manager ${nomManager}` : 'de tous les managers';
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -228,24 +227,29 @@ async function agentPerformance(messages, nomManager = null, historique = []) {
         }],
         historique
     );
+    if (!reponse) return `📊 *Performance ${cible}*\n\n_IA indisponible. Utilisez !statut ou !incidents pour les données en temps réel._`;
+    return reponse;
 }
 
+// ============ AGENT RECHERCHE ============
 async function agentRecherche(question, messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
-            content: `Messages disponibles :\n\n${contexte}\n\nQuestion : ${question}\n\nIMPORTANT : Si la question fait référence à une réponse précédente dans l'historique de conversation, utilise ces informations. Réponds directement et précisément. Si c'est une question simple, réponds simplement sans format de bilan.`
+            content: `Messages disponibles :\n\n${contexte}\n\nQuestion : ${question}\n\nIMPORTANT : Si la question fait référence à une réponse précédente dans l'historique, utilise ces informations. Réponds directement et précisément.`
         }],
         historique
     );
+    if (!reponse) return `🔍 *Recherche*\n\n_IA indisponible. Votre question : "${question}"\n\n${messages.length} messages disponibles dans la période. Essayez !statut ou !incidents._`;
+    return reponse;
 }
 
 // ============ AGENT RECOMMANDATIONS ============
 async function agentRecommandations(messages, historique = []) {
     const contexte = formaterMessagesStructures(messages);
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -253,13 +257,25 @@ async function agentRecommandations(messages, historique = []) {
         }],
         historique
     );
+    if (!reponse) {
+        // Fallback : recommandations basées sur les urgences détectées
+        const urgences = messages.filter(m => m.categorie === 'urgence' || m.categorie === 'panne');
+        if (urgences.length > 0) {
+            return `🎯 *RECOMMANDATIONS* _(IA indisponible — analyse locale)_\n\n` +
+                   urgences.slice(0, 3).map((u, i) => `${i+1}. ⚠️ Traiter : ${(u.texte||'').substring(0,80)}`).join('\n');
+        }
+        return `🎯 *RECOMMANDATIONS*\n\n_IA indisponible. Aucune urgence détectée localement._`;
+    }
+    return reponse;
 }
 
 // ============ AGENT BRIEF PRINCIPAL ============
+// ✅ Fix 8 : fallback vers brief local si IA indisponible
 async function agentBrief(messages, historique = []) {
-    if (messages.length === 0) return '📭 Aucun message reçu pour cette période.';
+    if (!messages || messages.length === 0) return '📭 Aucun message reçu pour cette période.';
+
     const contexte = formaterMessagesStructures(messages);
-    return appelerIA(
+    const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
         [{
             role: 'user',
@@ -267,6 +283,14 @@ async function agentBrief(messages, historique = []) {
         }],
         historique
     );
+
+    // ✅ Fix 8 : si IA indisponible → brief local automatique
+    if (!reponse) {
+        console.log('⚠️ IA indisponible — génération du brief local...');
+        return genererBriefLocal(messages);
+    }
+
+    return reponse;
 }
 
 module.exports = {
