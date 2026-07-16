@@ -12,7 +12,26 @@ function analyserRapport(texte) {
     // ==========================================
     // 1. DÉTECTION : OUVERTURE
     // ==========================================
-    if (texteNorm.includes('ouverture du') || texteNorm.includes('bonjour team')) {
+    // ✅ Fix Bug 1 : si le texte contient achat+vente avec chiffres → fixture prioritaire
+    // (Eric répond en citant le modèle d'ouverture mais avec les taux)
+    const estFixturePrioritaire = (
+        texteNorm.includes('achat:') || texteNorm.includes('achat :')
+    ) && (
+        texteNorm.includes('vente:') || texteNorm.includes('vente :')
+    ) && /achat\s*:\s*[\d]/.test(texteNorm);
+
+    // ✅ Fix Bug 2 : 'bonjour team' seul ne déclenche plus l'ouverture
+    const estOuverture = !estFixturePrioritaire && (
+        texteNorm.includes('ouverture du') || 
+        (texteNorm.includes('bonjour team') && (
+            texteNorm.includes('ouverture') ||
+            texteNorm.includes('connexion ok') ||
+            texteNorm.includes('caisse ok') ||
+            texteNorm.includes('page') ||
+            texteNorm.includes('mgr')
+        ))
+    );
+    if (estOuverture) {
         type = 'ouverture';
         
         const matchHeure = texteNorm.match(/(\d{1,2}[h:]\d{2})/);
@@ -32,8 +51,9 @@ function analyserRapport(texte) {
     // ==========================================
     // 2. DÉTECTION : FIXTURES & TAUX
     // ==========================================
-    // Fix 3: detection resserree
+    // Fix 3: detection resserree + fixture prioritaire sur ouverture citée
     else if (
+        estFixturePrioritaire ||
         texteNorm.includes('fixtures sport') ||
         texteNorm.includes('taux de change') ||
         (texteNorm.includes('achat') && texteNorm.includes('vente') && texteNorm.includes('taux')) ||
