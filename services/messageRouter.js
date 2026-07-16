@@ -357,7 +357,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     } catch (e) {}
 
     // Fix 5 : enregistrer activité manager avec catégorie
-    if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(memoire.redis);
+    if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(redisClient);
     await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
 
     const heureActuelle = new Date().getHours();
