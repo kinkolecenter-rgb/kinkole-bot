@@ -586,9 +586,15 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             try {
                 await db.sauvegarderReport(typeLocal, analyseLocale.donnees || {}, participantJid, true, null);
                 console.log(`✅ Rapport structuré (${typeLocal}) sauvegardé dans la base !`);
+                
+                // 🛑 CORRECTION ANTI-DOUBLONS : On marque le message comme traité pour le cacher au rattrapage auto
+                if (msg.key && msg.key.id) {
+                    await db.marquerMessageTraite(msg.key.id);
+                }
             } catch (e) {
-                console.error('⚠️ Erreur écriture DB:', e.message);
+                console.error('⚠️ Erreur DB (Sauvegarde ou Marquage traité):', e.message);
             }
+
 
             // ⚙️ WORKFLOW 1 : OUVERTURE
             if (typeLocal === 'ouverture') {
