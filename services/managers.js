@@ -1,35 +1,46 @@
 const config = require('../config');
+const { classifier } = require('./analyseur');
 
 module.exports = function creerGestionnaireManagers(redis) {
 
     const CLE_ACTIVITE = (jid) => `manager:activite:${jid}`;
-    const CLE_STATS = (jid) => `manager:stats:${jid}`;
+    const CLE_STATS    = (jid) => `manager:stats:${jid}`;
+    const CLE_DERNIER  = (jid) => `manager:dernier:${jid}`;
     const TTL = 60 * 60 * 24 * 30; // 30 jours
 
     const enregistrerActivite = async (expediteurJid, message) => {
         try {
-            // Trouver le manager par JID ou nom
-            const managerJid = trouverManagerParNom(expediteurJid) || expediteurJid;
-            const info = config.managers[managerJid];
-            if (!info) return; // pas un manager connu
+            const managerJid = trouverManagerParJid(expediteurJid);
+            if (!managerJid) return; // pas un manager connu
+
+            const categorie = classifier(message.texte || '');
 
             const activite = {
                 timestamp: Date.now(),
-                texte: message.texte,
-                groupe: message.groupeNom,
-                categorie: message.categorie || 'information'
+                texte: (message.texte || '').substring(0, 200),
+                groupe: message.groupeNom || '',
+                categorie
             };
 
+            // ✅ Fix 7 : lpush stocke en tête → lrange retourne du plus récent au plus ancien
+            // On ne reverse plus dans getActivite
             await redis.lpush(CLE_ACTIVITE(managerJid), JSON.stringify(activite));
             await redis.ltrim(CLE_ACTIVITE(managerJid), 0, 199);
             await redis.expire(CLE_ACTIVITE(managerJid), TTL);
 
-            // Mettre à jour stats
+            // Dernière activité (timestamp simple)
+            await redis.set(CLE_DERNIER(managerJid), Date.now(), { ex: TTL });
+
+            // Stats
             await incrementerStat(managerJid, 'messages_total');
-            if (activite.categorie === 'urgence' || activite.categorie === 'incident') {
+
+            if (categorie === 'urgence') {
+                await incrementerStat(managerJid, 'urgences');
+            }
+            if (categorie === 'incident' || categorie === 'panne') {
                 await incrementerStat(managerJid, 'incidents');
             }
-            if (activite.categorie === 'validation') {
+            if (categorie === 'validation' || categorie === 'rapport') {
                 await incrementerStat(managerJid, 'validations');
             }
 
@@ -46,22 +57,29 @@ module.exports = function creerGestionnaireManagers(redis) {
         } catch (e) {}
     };
 
-    const trouverManagerParNom = (nomOuJid) => {
-        // Cherche par JID direct
-        if (config.managers[nomOuJid]) return nomOuJid;
+    // ✅ Fix : cherche par JID direct uniquement (plus fiable que par nom)
+    const trouverManagerParJid = (jid) => {
+        if (config.managers && config.managers[jid]) return jid;
+        return null;
+    };
 
-        // Cherche par nom dans le texte
+    // Gardé pour compatibilité avec assistant.js
+    const trouverManagerParNom = (nomOuJid) => {
+        if (config.managers && config.managers[nomOuJid]) return nomOuJid;
         const nom = nomOuJid.toLowerCase();
-        for (const [jid, info] of Object.entries(config.managers)) {
+        for (const [jid, info] of Object.entries(config.managers || {})) {
             if (info.nom.toLowerCase().includes(nom)) return jid;
         }
         return null;
     };
 
+    // ✅ Fix 7 : plus de .reverse() — lpush stocke déjà du plus récent au plus ancien
     const getActivite = async (managerJid, limit = 20) => {
         try {
             const data = await redis.lrange(CLE_ACTIVITE(managerJid), 0, limit - 1);
-            return data.map(d => JSON.parse(d)).reverse();
+            return data.map(d => {
+                try { return JSON.parse(d); } catch(e) { return null; }
+            }).filter(Boolean);
         } catch (e) {
             return [];
         }
@@ -72,40 +90,59 @@ module.exports = function creerGestionnaireManagers(redis) {
             const stats = await redis.hgetall(CLE_STATS(managerJid));
             return {
                 messages_total: parseInt(stats?.messages_total || 0),
-                incidents: parseInt(stats?.incidents || 0),
-                validations: parseInt(stats?.validations || 0)
+                incidents:      parseInt(stats?.incidents || 0),
+                urgences:       parseInt(stats?.urgences || 0),
+                validations:    parseInt(stats?.validations || 0)
             };
         } catch (e) {
-            return { messages_total: 0, incidents: 0, validations: 0 };
+            return { messages_total: 0, incidents: 0, urgences: 0, validations: 0 };
         }
+    };
+
+    // ✅ Fix 6 : score revu — basé sur ratio validations/incidents, pas juste des seuils fixes
+    const calculerScore = (stats) => {
+        let score = 50; // base neutre
+
+        // Activité générale
+        if (stats.messages_total > 0)  score += 10;
+        if (stats.messages_total > 5)  score += 10;
+        if (stats.messages_total > 15) score += 10;
+
+        // Ratio validations (rapports envoyés à temps)
+        if (stats.validations > 0) score += 10;
+        if (stats.validations > 3) score += 10;
+
+        // Pénalités incidents/urgences
+        score -= stats.incidents * 5;
+        score -= stats.urgences * 10;
+
+        return Math.max(0, Math.min(100, score));
     };
 
     const getPerformanceTousManagers = async () => {
         const resultats = [];
-        for (const [jid, info] of Object.entries(config.managers)) {
+        for (const [jid, info] of Object.entries(config.managers || {})) {
             const stats = await getStats(jid);
-            const activite = await getActivite(jid, 50);
+            const score = calculerScore(stats);
 
-            // Calcul score simple
-            let score = 0;
-            if (stats.messages_total > 0) score += 30;
-            if (stats.messages_total > 10) score += 20;
-            if (stats.validations > 0) score += 20;
-            if (stats.incidents < 3) score += 30;
-            if (stats.incidents >= 3) score -= 10;
-
-            // Dernière activité
-            const dernierMsg = activite[activite.length - 1];
-            const derniereActivite = dernierMsg
-                ? new Date(dernierMsg.timestamp).toLocaleTimeString('fr-FR')
-                : 'Aucune';
+            // Dernière activité depuis Redis
+            let derniereActivite = 'Aucune';
+            try {
+                const ts = await redis.get(CLE_DERNIER(jid));
+                if (ts) {
+                    derniereActivite = new Date(parseInt(ts)).toLocaleTimeString('fr-FR', {
+                        hour: '2-digit', minute: '2-digit',
+                        timeZone: 'Africa/Kinshasa'
+                    });
+                }
+            } catch(e) {}
 
             resultats.push({
                 jid,
                 nom: info.nom,
                 role: info.role,
                 stats,
-                score: Math.max(0, Math.min(100, score)),
+                score,
                 derniereActivite
             });
         }
@@ -115,19 +152,43 @@ module.exports = function creerGestionnaireManagers(redis) {
     };
 
     const formaterPerformance = (managers) => {
-        if (managers.length === 0) return '📭 Aucune donnée manager disponible.';
+        if (!managers || managers.length === 0) return '📭 Aucune donnée manager disponible.';
 
         let txt = `👥 *PERFORMANCE MANAGERS*\n\n`;
         managers.forEach((m, i) => {
-            const etoiles = '⭐'.repeat(Math.ceil(m.score / 20));
-            txt += `${i + 1}. *${m.nom}* (${m.role})\n`;
+            const etoiles = '⭐'.repeat(Math.max(1, Math.ceil(m.score / 20)));
+            const tendance = m.stats.incidents > 2 ? ' ⚠️' : m.stats.validations > 3 ? ' 📈' : '';
+            txt += `${i + 1}. *${m.nom}* (${m.role})${tendance}\n`;
             txt += `   ${etoiles} Score: ${m.score}/100\n`;
             txt += `   📨 Messages: ${m.stats.messages_total}\n`;
-            txt += `   ✅ Validations: ${m.stats.validations}\n`;
+            txt += `   ✅ Rapports/Validations: ${m.stats.validations}\n`;
             txt += `   ⚠️ Incidents: ${m.stats.incidents}\n`;
+            if (m.stats.urgences > 0) txt += `   🔴 Urgences: ${m.stats.urgences}\n`;
             txt += `   🕐 Dernière activité: ${m.derniereActivite}\n\n`;
         });
         return txt;
+    };
+
+    // ✅ NOUVEAU : Réinitialiser les stats d'un manager (utile pour tests ou début de mois)
+    const resetStats = async (managerJid) => {
+        try {
+            await redis.del(CLE_STATS(managerJid));
+            await redis.del(CLE_ACTIVITE(managerJid));
+            await redis.del(CLE_DERNIER(managerJid));
+            console.log(`🔄 Stats réinitialisées pour ${managerJid}`);
+        } catch(e) {
+            console.error('❌ Erreur reset stats:', e.message);
+        }
+    };
+
+    // ✅ NOUVEAU : Résumé rapide d'un manager spécifique
+    const getResumeManger = async (managerJid) => {
+        const info = config.managers?.[managerJid];
+        if (!info) return null;
+        const stats = await getStats(managerJid);
+        const activite = await getActivite(managerJid, 5);
+        const score = calculerScore(stats);
+        return { jid: managerJid, nom: info.nom, role: info.role, stats, score, activite };
     };
 
     return {
@@ -136,6 +197,9 @@ module.exports = function creerGestionnaireManagers(redis) {
         getStats,
         getPerformanceTousManagers,
         formaterPerformance,
-        trouverManagerParNom
+        trouverManagerParNom,
+        trouverManagerParJid,
+        resetStats,
+        getResumeManger
     };
 };
