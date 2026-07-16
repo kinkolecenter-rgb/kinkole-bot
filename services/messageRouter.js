@@ -4,6 +4,9 @@ const { detecterTypeRapport, verifierCompletude, getDestination } = require('./r
 const db = require('./database'); 
 const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
 const { gererCommandesPatron } = require('./menuPatron');
+const { analyserMessage } = require('./analyseur'); // Fix 4 : brancher l'analyseur
+const creerGestionnaireManagers = require('./managers'); // Fix 5 : stats managers
+let gestionnaireManagers = null; // initialisé au premier message
 const cacheOuverture = new Map();
 
 async function getCachePages() {
@@ -108,17 +111,24 @@ function extraireTexte(msg) {
 function parserIncidentsFormat(texte) {
     const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
     const incidents = [];
-    const regexLigne = /^(\d{5,7})\s*[=:]\s*([\d.,]+)$/;
+
+    // ✅ Format élargi — capture tous les styles réels des managers :
+    // "779489 : 372.700fc"  |  "* 779489 : 372.700fc"  |  "• 421596 = 150000"
+    // "- 1363049 : 290.450 FC"  |  ". 421556=286350"
+    const regexLigne = /^[*\-•.\s]*([0-9]{5,7})\s*[=:]\s*([0-9.,]+)\s*(fc|FC|f|F)?/;
 
     for (const ligne of lignes) {
-        // Ignore la ligne d'entête (ex: "Non clôturé", "Les id non cloture"...)
-        if (/non.{0,5}cl/i.test(ligne) || /les\s+id/i.test(ligne)) continue;
-        // Ignore les lignes de type "00" ou commentaires courts
-        if (/^\d{1,3}$/.test(ligne)) continue;
+        if (/non.{0,10}cl/i.test(ligne)) continue;
+        if (/les\s+id/i.test(ligne)) continue;
+        if (/ids?\s+non/i.test(ligne)) continue;
+        if (/^[-*•=\s]+$/.test(ligne)) continue;
+        if (/^[0-9]{1,3}$/.test(ligne)) continue;
+        if (/^(aucun|ok|tout|bonsoir|bonjour)/i.test(ligne)) continue;
 
         const match = ligne.match(regexLigne);
         if (match) {
-            incidents.push({ id: match[1], montant: match[2] });
+            const montantBrut = match[2].replace(/\./g, '').replace(',', '.');
+            incidents.push({ id: match[1], montant: montantBrut });
         }
     }
 
@@ -130,7 +140,8 @@ function parserIncidentsFormat(texte) {
  */
 function contiendIdsSeuls(texte) {
     const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
-    const regexIdSeul = /^\d{5,7}$/;
+    // ✅ Élargi : détecte "* 779489", "• 421596", "- 1363049", "421596" seul
+    const regexIdSeul = /^[*\-•.\s]*[0-9]{5,7}\s*$/;
     return lignes.some(l => regexIdSeul.test(l));
 }
 
@@ -325,16 +336,26 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     const texteNormalise = texteBrut.toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
     console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texteNormalise.substring(0, 50)}...`);
 
-    // Sauvegarde en mémoire Redis
-    await memoire.sauvegarderMessage(jid, {
-        groupeJid: jid, groupeNom: NOMS_GROUPES[jid] || jid, expediteurJid: participantJid, expediteur, texte: texteStocke, estMedia, timestamp: Date.now()
-    });
+    // Fix 4 : analyser le message AVANT de sauvegarder pour enrichir avec catégorie/priorité
+    const messageBase = {
+        groupeJid: jid, groupeNom: NOMS_GROUPES[jid] || jid,
+        expediteurJid: participantJid, expediteur,
+        texte: texteStocke, estMedia, timestamp: Date.now()
+    };
+    const messageAnalyse = analyserMessage(messageBase);
+
+    // Sauvegarde en mémoire Redis (avec catégorie)
+    await memoire.sauvegarderMessage(jid, messageAnalyse);
 
     // Sauvegarde dans PostgreSQL
     try {
         await db.upsertManager(participantJid, expediteur);
         await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
     } catch (e) {}
+
+    // Fix 5 : enregistrer activité manager avec catégorie
+    if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(memoire.redis);
+    await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
 
     const heureActuelle = new Date().getHours();
 
@@ -347,23 +368,43 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         const estRapportAutre = (
             texteNormalise.includes('reste caution') ||
             texteNormalise.includes('rapport reste') ||
-            texteNormalise.includes('ticket') ||
             texteNormalise.includes('instant win') ||
             texteNormalise.includes('number games') ||
             texteNormalise.includes('ids plus') ||
             texteNormalise.includes('ids moins') ||
-            texteNormalise.includes('loto') ||
-            texteNormalise.includes('fixture')
+            texteNormalise.includes('fixture') ||
+            texteNormalise.includes('dernier rapport') ||
+            texteNormalise.includes('dernier ticket') ||
+            texteNormalise.includes('nombre de tickets') ||
+            texteNormalise.includes('etat des stocks') ||
+            texteNormalise.includes('état des stocks') ||
+            // "ticket" seul mais PAS si accompagné de "non clôturé"
+            (texteNormalise.includes('ticket') && !texteNormalise.includes('non cl') && !texteNormalise.includes('cloture'))
         );
 
         const estNonCloture = !estRapportAutre && (
+            // Formulations directes
             texteNormalise.includes('non cloture') || 
             texteNormalise.includes('non clôture') || 
+            texteNormalise.includes('non cloturer') ||
+            texteNormalise.includes('non clôturer') ||
             texteNormalise.includes('pas cloture') || 
             texteNormalise.includes('pas clôturé') || 
             texteNormalise.includes('pas cloturer') ||
+            texteNormalise.includes('n a pas cloture') ||
+            texteNormalise.includes("n'a pas cloture") ||
+            texteNormalise.includes('n ont pas cloture') ||
+            // Formulations avec "ids"
+            texteNormalise.includes('ids non') ||
             texteNormalise.includes('id non') ||
-            texteNormalise.includes('les id non')
+            texteNormalise.includes('les id non') ||
+            texteNormalise.includes('les ids non') ||
+            texteNormalise.includes('ids non cloture') ||
+            // Formulations de Timothée et autres managers
+            texteNormalise.includes('les ids non cloture') ||
+            texteNormalise.includes('les ids non clôturé') ||
+            // Mot clé seul suffit si suivi d'IDs
+            (texteNormalise.includes('cloture') && /[0-9]{5,7}/.test(texteNormalise))
         );
 
         const estResolution = texteNormalise.includes('resolu') || texteNormalise.includes('résolu');
