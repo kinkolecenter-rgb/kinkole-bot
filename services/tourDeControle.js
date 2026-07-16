@@ -8,6 +8,7 @@ const GROUPE_DISPARUS = '243900435187-1564716535@g.us';
 // Importé depuis messageRouter pour activer l'état d'attente après la question de 23h
 let etatAttente = null;
 let memoireRef = null;
+let redisClient = null;
 function setEtatAttente(ref) { etatAttente = ref; }
 
 // Fix 4 : utilitaire pour tronquer les messages trop longs (limite WhatsApp ~65000 chars)
@@ -16,9 +17,10 @@ function tronquer(texte, max = 60000) {
     return texte.substring(0, max) + '\n\n_[Message tronqué — trop long]_';
 }
 
-function initialiserTourDeControle(sock, etatAttenteRef, memoire) {
+function initialiserTourDeControle(sock, etatAttenteRef, memoire, redisClientRef) {
     etatAttente = etatAttenteRef;
     memoireRef = memoire;
+    redisClient = redisClientRef || null;
     console.log("🗼 Tour de Contrôle activée. Alertes configurées EXCLUSIVEMENT sur Synchro Kinkole...");
 
     // 1. Rappel Ouverture (09h00)
@@ -156,11 +158,11 @@ async function verificationClotureQuotidienne(sock, groupeId) {
         if (etatAttente) {
             etatAttente.set(groupeId, { etape: 'ATTENTE_REPONSE_23H', timestamp: Date.now() });
             // Fix 5 : persister dans Redis pour survivre aux redémarrages
-            if (memoireRef) {
+            if (redisClient) {
                 try {
                     const data = {};
                     for (const [jid, etat] of etatAttente.entries()) data[jid] = etat;
-                    await memoireRef.redis.set('etat_attente_synchro', JSON.stringify(data), { ex: 7200 });
+                    await redisClient.set('etat_attente_synchro', JSON.stringify(data), 'EX', 7200);
                 } catch (e) { console.error('⚠️ Erreur sauvegarde Redis etatAttente:', e.message); }
             }
             console.log(`🟡 État d'attente activé dans Synchro Kinkole après question 23h.`);
