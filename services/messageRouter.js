@@ -351,11 +351,13 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     await memoire.sauvegarderMessage(jid, messageAnalyse);
 
     // Sauvegarde dans PostgreSQL
+    let messageDbId = null; // 👈 On prépare une variable pour le vrai ID
     try {
         await db.upsertManager(participantJid, expediteur);
-        await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
+        const savedMsg = await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
+        if (savedMsg && savedMsg.id) messageDbId = savedMsg.id; // 👈 On capture l'ID généré par Prisma !
     } catch (e) {}
-
+    
     // Fix 5 : enregistrer activité manager avec catégorie
     if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(redisClient);
     await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
@@ -587,9 +589,9 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                 await db.sauvegarderReport(typeLocal, analyseLocale.donnees || {}, participantJid, true, null);
                 console.log(`✅ Rapport structuré (${typeLocal}) sauvegardé dans la base !`);
                 
-                // 🛑 CORRECTION ANTI-DOUBLONS : On marque le message comme traité pour le cacher au rattrapage auto
-                if (msg.key && msg.key.id) {
-                    await db.marquerMessageTraite(msg.key.id);
+                // 🛑 CORRECTION ANTI-DOUBLONS : On utilise le VRAI ID de la base de données
+                if (messageDbId) {
+                    await db.marquerMessageTraite(messageDbId);
                 }
             } catch (e) {
                 console.error('⚠️ Erreur DB (Sauvegarde ou Marquage traité):', e.message);
