@@ -63,23 +63,26 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 
 // Fix 5 : persistance Redis pour survivre aux redémarrages
-async function sauvegarderEtatAttente(memoire) {
+// Fix : redis passé directement depuis index.js via setRedisClient()
+let redisClient = null;
+function setRedisClient(client) { redisClient = client; }
+
+async function sauvegarderEtatAttente() {
+    if (!redisClient) return;
     try {
         const data = {};
-        for (const [jid, etat] of etatAttente.entries()) {
-            data[jid] = etat;
-        }
-        await memoire.redis.set(CLE_REDIS_ATTENTE, JSON.stringify(data), { ex: 7200 }); // expire 2h
+        for (const [jid, etat] of etatAttente.entries()) data[jid] = etat;
+        await redisClient.set(CLE_REDIS_ATTENTE, JSON.stringify(data), 'EX', 7200);
     } catch (e) { console.error('⚠️ Erreur sauvegarde etatAttente Redis:', e.message); }
 }
 
-async function chargerEtatAttente(memoire) {
+async function chargerEtatAttente() {
+    if (!redisClient) return;
     try {
-        const raw = await memoire.redis.get(CLE_REDIS_ATTENTE);
+        const raw = await redisClient.get(CLE_REDIS_ATTENTE);
         if (raw) {
             const data = JSON.parse(raw);
             for (const [jid, etat] of Object.entries(data)) {
-                // Ne pas charger les états expirés
                 if (Date.now() - etat.timestamp < EXPIRATION_ATTENTE_MS) {
                     etatAttente.set(jid, etat);
                 }
@@ -194,7 +197,7 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
 
     // Fix 5 : charger l'état depuis Redis au premier message (une seule fois)
     if (!handleIncomingMessage._redisCharge) {
-        await chargerEtatAttente(memoire);
+        await chargerEtatAttente();
         handleIncomingMessage._redisCharge = true;
     }
 
@@ -448,7 +451,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
                     } else {
                         // ❌ Format incorrect → demander la correction
                         etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
-                        await sauvegarderEtatAttente(memoire);
+                        await sauvegarderEtatAttente();
                         await sock.sendMessage(jid, {
                             text: `⚠️ Format incorrect. Je ne peux pas enregistrer sans les montants.\n\n${MODELE_NON_CLOTURE}`
                         });
@@ -493,7 +496,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             } else {
                 // ❌ Format incorrect → on demande la correction et on attend
                 etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
-                await sauvegarderEtatAttente(memoire);
+                await sauvegarderEtatAttente();
                 await sock.sendMessage(jid, {
                     text: `⚠️ J'ai bien capté le rapport de non-clôturé, mais le format est incorrect.\n\nJe ne peux pas enregistrer et publier sans les montants.\n\n${MODELE_NON_CLOTURE}`
                 });
@@ -761,5 +764,6 @@ module.exports = {
     handleIncomingMessage,
     gererMessageGroupe,
     lancerRattrapageAutomatique,
-    etatAttente  // ← tourDeControle l'utilise pour déclencher ATTENTE_REPONSE_23H
+    etatAttente,      // ← tourDeControle l'utilise pour déclencher ATTENTE_REPONSE_23H
+    setRedisClient    // ← appelé depuis index.js pour passer le client Redis
 };
