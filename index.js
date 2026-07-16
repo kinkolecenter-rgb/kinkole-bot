@@ -125,8 +125,6 @@ async function startBot() {
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
         
-            const { etatAttente } = require('./services/messageRouter');
-        
             // APRÈS
             setRedisClient(redis);
             lancerRattrapageAutomatique(sock, db);
@@ -156,43 +154,12 @@ async function startBot() {
                     try {
                         await sock.groupMetadata(jid);
                         console.log(`✅ Groupe chargé: ${jid}`);
-
-                        setTimeout(async () => {
-                            try {
-                                const meta = await sock.groupMetadata('120363021280044937@g.us');
-                                console.log(`👥 Membres Synchro Kinkole :`);
-                                meta.participants.forEach(p => {
-                                    console.log(`📌 ${p.id} | admin=${p.isAdmin || false}`);
-                                });
-                                
-                                const numeros = [
-                                    '243900014909',
-                                    '243903533322',
-                                    '243898170279',
-                                    '243904323374'
-                                ];
-                                for (const num of numeros) {
-                                    try {
-                                        const contact = await sock.onWhatsApp(num);
-                                        if (contact?.length > 0) {
-                                            console.log(`📌 ${num} → ${contact[0].jid}`);
-                                        }
-                                    } catch(e) {
-                                        console.error(`❌ ${num}:`, e.message);
-                                    }
-                                }
-                            } catch(e) {
-                                console.error('❌ Erreur:', e.message);
-                            }
-                        }, 8000);
-
-                        
                     } catch(e) {
                         console.error(`❌ Groupe non accessible: ${jid}`);
                     }
                 }
             }, 5000);
-
+            
             // Planifier briefs automatiques
             planifierBriefs(assistant);
         }
