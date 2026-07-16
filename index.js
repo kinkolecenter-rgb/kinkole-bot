@@ -16,14 +16,13 @@ console.log = (...args) => {
     ) return; // bloquer ces logs
     originalLog(...args);
 };
-const { handleIncomingMessage } = require('./services/messageRouter');
+const { handleIncomingMessage, lancerRattrapageAutomatique, etatAttente, setRedisClient } = require('./services/messageRouter');
 const { initialiserTourDeControle } = require('./services/tourDeControle');
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const Redis = require('ioredis');
 const QRCode = require('qrcode');
 const express = require('express');
-const { lancerRattrapageAutomatique } = require('./services/messageRouter');
 const db = require('./services/database'); // Ajuste le chemin vers ton fichier DB
 const config = require('./config');
 const redisStore = require('./auth/redisStore');
@@ -32,7 +31,6 @@ const creerMemoire = require('./services/memoire');
 const creerAssistant = require('./services/assistant');
 const { agentBrief } = require('./services/agents');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./services/routeurRapports');
-const { etatAttente } = require('./services/messageRouter');
 
 
 
@@ -129,8 +127,10 @@ async function startBot() {
         
             const { etatAttente } = require('./services/messageRouter');
         
+            // APRÈS
+            setRedisClient(redis);
             lancerRattrapageAutomatique(sock, db);
-            initialiserTourDeControle(sock, etatAttente, memoire);
+            initialiserTourDeControle(sock, etatAttente, memoire, redis);
     
             // --- SCRIPT TEMPORAIRE POUR LISTER LES MEMBRES ---
             const groupeJid = "120363021280044937@g.us";
