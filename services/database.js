@@ -134,6 +134,61 @@ async function marquerIncidentResolu(machineId) {
     }
 }
 
+// ==========================================
+// 📍 SAUVEGARDE DES VISITES TERRAIN
+// ==========================================
+async function sauvegarderVisiteTerrain(managerJid, texteBrut, typeRapport) {
+    try {
+        // Extraction de l'ID (5 à 7 chiffres consécutifs)
+        const matchId = texteBrut.match(/\b(\d{5,7})\b/);
+        const agentId = matchId ? matchId[1] : "Inconnu";
+
+        await prisma.visiteTerrain.create({
+            data: {
+                agentId: agentId,
+                managerJid: managerJid,
+                branche: "Kinkole",
+                pdv: "Extrait du texte", // On garde le texte brut complet pour les détails
+                statut: typeRapport, 
+                tickets: 0,
+                heureVisite: new Date().toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }),
+                texteBrut: texteBrut
+            }
+        });
+        console.log(`✅ Visite Terrain sauvegardée pour l'agent ${agentId}`);
+    } catch (error) {
+        console.error("❌ Erreur DB Visite Terrain:", error.message);
+    }
+}
+
+// ==========================================
+// 🚨 SAUVEGARDE DES PÉNALITÉS (Filtre intelligent)
+// ==========================================
+async function sauvegarderPenalite(managerJid, texteBrut) {
+    try {
+        const matchId = texteBrut.match(/\b(\d{5,7})\b/);
+        const agentId = matchId ? matchId[1] : "Sans ID";
+
+        // Extraction du montant (ex: 10$)
+        const matchMontant = texteBrut.match(/(\d+)\s*\$/);
+        const montant = matchMontant ? matchMontant[1] + "$" : "Non précisé";
+
+        await prisma.penalite.create({
+            data: {
+                agentId: agentId,
+                managerJid: managerJid,
+                branche: "Kinkole",
+                motif: "Voir texte brut", 
+                montant: montant,
+                texteBrut: texteBrut
+            }
+        });
+        console.log(`✅ Pénalité sauvegardée : Agent ${agentId} | Montant ${montant}`);
+    } catch (error) {
+        console.error("❌ Erreur DB Pénalité:", error.message);
+    }
+}
+
 async function disconnect() {
     await prisma.$disconnect();
 }
@@ -150,5 +205,7 @@ module.exports = {
     getReportsAujourdhui,
     sauvegarderIncidentCloture,
     getIncidentsNonResolus,
-    marquerIncidentResolu
+    marquerIncidentResolu,
+    sauvegarderVisiteTerrain,
+    sauvegarderPenalite
 };
