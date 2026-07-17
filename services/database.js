@@ -135,27 +135,39 @@ async function marquerIncidentResolu(machineId) {
 }
 
 // ==========================================
-// 📍 SAUVEGARDE DES VISITES TERRAIN
+// 📍 SAUVEGARDE DES VISITES TERRAIN (Mise à jour)
 // ==========================================
 async function sauvegarderVisiteTerrain(managerJid, texteBrut, typeRapport) {
     try {
-        // Extraction de l'ID (5 à 7 chiffres consécutifs)
-        const matchId = texteBrut.match(/\b(\d{5,7})\b/);
+        // 1. Extraction de l'ID (gère les emojis 🆔, les "ID :" et les nombres à partir de 3 chiffres)
+        const matchId = texteBrut.match(/(?:🆔|ID|id)\s*[:\-]?\s*(\d+)/i) || texteBrut.match(/\b(\d{3,7})\b/);
         const agentId = matchId ? matchId[1] : "Inconnu";
+
+        // 2. Extraction du P.d.v (Prend tout ce qui suit "P.d.v.:" jusqu'à la fin de la ligne)
+        const matchPdv = texteBrut.match(/P\.d\.v\.\s*[:\-]?\s*([^\n]+)/i);
+        const pdv = matchPdv ? matchPdv[1].trim() : "Non précisé";
+
+        // 3. Extraction du Statut (Prend "ok" ou "pénalisé")
+        const matchStatut = texteBrut.match(/Statut\s*[:\-]?\s*([^\n]+)/i);
+        const statut = matchStatut ? matchStatut[1].trim() : typeRapport;
+
+        // 4. Extraction des Tickets (Ne prend que les chiffres qui suivent "Ticket :")
+        const matchTickets = texteBrut.match(/Ticket\s*[:\-]?\s*(\d+)/i);
+        const tickets = matchTickets ? parseInt(matchTickets[1], 10) : 0;
 
         await prisma.visiteTerrain.create({
             data: {
                 agentId: agentId,
                 managerJid: managerJid,
                 branche: "Kinkole",
-                pdv: "Extrait du texte", // On garde le texte brut complet pour les détails
-                statut: typeRapport, 
-                tickets: 0,
+                pdv: pdv,
+                statut: statut, 
+                tickets: tickets,
                 heureVisite: new Date().toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }),
                 texteBrut: texteBrut
             }
         });
-        console.log(`✅ Visite Terrain sauvegardée pour l'agent ${agentId}`);
+        console.log(`✅ Visite Terrain sauvée -> Agent: ${agentId} | PDV: ${pdv} | Statut: ${statut} | Tickets: ${tickets}`);
     } catch (error) {
         console.error("❌ Erreur DB Visite Terrain:", error.message);
     }
