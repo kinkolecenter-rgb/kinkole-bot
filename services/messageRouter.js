@@ -540,6 +540,44 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             return;
         }
     }
+
+
+    // =================================================================
+    // 🕵️‍♂️ INTERCEPTEUR TERRAIN ET PÉNALITÉS (WORKFLOWS SPÉCIFIQUES)
+    // =================================================================
+    
+    // 1️⃣ GROUPE : Rapport PR terrain kinko
+    if (jid === '120363040045715280@g.us') {
+        if (estPatron) return; // Le boss est immunisé
+        
+        await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
+        
+        // Transfert automatique vers le groupe "Agent en ordre & Visité"
+        await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
+        return;
+    }
+
+    // 2️⃣ GROUPE : Agent en ordre & Visité
+    if (jid === '243900435187-1578719495@g.us') { 
+        if (estPatron) return; 
+        
+        // Filtre la branche qui coule (Kinkole)
+        if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
+            await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Agent Visité');
+        }
+        return;
+    }
+
+    // 3️⃣ GROUPE : PENALITy QS all shop
+    if (jid === '243907634105-1540987363@g.us') {
+        if (estPatron) return; 
+
+        // Filtre la branche Kinkole
+        if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
+            await db.sauvegarderPenalite(participantJid, texteStocke);
+        }
+        return;
+    }
     // =================================================================
 
     // ── DÉTECTION DES AUTRES RAPPORTS STANDARDS (OUVERTURE, FIXTURE...) ──
