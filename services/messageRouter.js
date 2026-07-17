@@ -548,17 +548,22 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     
     // 1️⃣ GROUPE : Rapport PR terrain kinko
     if (jid === '120363040045715280@g.us') {
-        if (estPatron) return; // Le boss est ignoré pour les visites terrain
+        if (estPatron) return; // Le boss est ignoré
         
-        // 🛑 RÈGLE STRICTE : Si le message contient "$", c'est une pénalité, on l'ignore !
+        // 🛑 CADENAS 1 : Si le message contient "$", c'est une pénalité, on bloque !
         if (texteStocke.includes('$')) {
-            console.log("⚠️ Pénalité détectée dans PR Terrain -> Ignorée comme visite.");
+            console.log("⚠️ Pénalité ignorée dans le groupe PR Terrain.");
             return;
         }
+
+        // 🛑 CADENAS 2 : Si ce n'est pas un vrai rapport (pas de P.d.v ni de tickets), on bloque !
+        if (!texteNormalise.includes('p.d.v') && !texteNormalise.includes('pdv') && !texteNormalise.includes('ticket')) {
+            console.log(`⚠️ Message ignoré (hors sujet) : ${texteStocke.substring(0, 20)}...`);
+            return; 
+        }
         
+        // ✅ Si on arrive ici, c'est un vrai rapport de visite parfait
         await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
-        
-        // Transfert automatique vers le groupe "Agent en ordre & Visité"
         await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
         return;
     }
@@ -567,7 +572,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     if (jid === '243900435187-1578719495@g.us') { 
         if (estPatron) return; 
         
-        // Filtre la branche qui coule (Kinkole)
         if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
             await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Agent Visité');
         }
@@ -576,10 +580,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
     // 3️⃣ GROUPE : PENALITy QS all shop
     if (jid === '243907634105-1540987363@g.us') {
-        // 🟢 NOUVELLE RÈGLE : On ne bloque plus le patron ici !
-        // (Le "if (estPatron) return;" a été supprimé).
-
-        // Filtre la branche Kinkole
         if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
             await db.sauvegarderPenalite(participantJid, texteStocke);
         }
