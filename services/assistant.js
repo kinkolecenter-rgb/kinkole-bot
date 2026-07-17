@@ -409,7 +409,7 @@ module.exports = function creerAssistant(sock, memoire, contexte) {
     }
 
     // ── RAPPORTS DU SOIR (Relances entre 21h et 01h du matin) ──
-    if (heure >= 21 || heure < 2) {
+    if (heure >= 22 || heure < 2) {
         if (!check(t => t.includes('dernier rapport'))) {
             const fermetureDB = await db.getReportsAujourdhui('fermeture');
             if (!fermetureDB || fermetureDB.length === 0) {
