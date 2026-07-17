@@ -37,7 +37,7 @@ const { detecterTypeRapport, verifierCompletude, getDestination } = require('./s
 const app = express();
 let currentQR = null;
 let isConnected = false;
-
+let processusDemarres = false; // 👈 Le fameux cadenas anti-doublon
 const redis = new Redis({
     host: config.redis.host,
     port: config.redis.port,
@@ -125,10 +125,19 @@ async function startBot() {
             currentQR = null;
             console.log('✅ WhatsApp connecté !');
         
-            // APRÈS
             setRedisClient(redis);
-            lancerRattrapageAutomatique(sock, db);
-            initialiserTourDeControle(sock, etatAttente, memoire, redis);
+
+            // 🛑 LE CADENAS ANTI-DOUBLON EST ICI 🛑
+            if (!processusDemarres) {
+                lancerRattrapageAutomatique(sock, db);
+                initialiserTourDeControle(sock, etatAttente, memoire, redis);
+                planifierBriefs(assistant);
+                
+                processusDemarres = true; // On verrouille pour les prochaines reconnexions
+                console.log('🗼 Processus de fond activés (Sécurité anti-doublon ON)');
+            } else {
+                console.log('🔄 Reconnexion réseau (Les processus tournent déjà, pas de doublon).');
+            }
     
             // --- SCRIPT TEMPORAIRE POUR LISTER LES MEMBRES ---
             const groupeJid = "120363021280044937@g.us";
@@ -159,9 +168,6 @@ async function startBot() {
                     }
                 }
             }, 5000);
-            
-            // Planifier briefs automatiques
-            planifierBriefs(assistant);
         }
     });
 
