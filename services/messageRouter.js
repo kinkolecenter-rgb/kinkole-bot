@@ -548,7 +548,13 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     
     // 1️⃣ GROUPE : Rapport PR terrain kinko
     if (jid === '120363040045715280@g.us') {
-        if (estPatron) return; // Le boss est immunisé
+        if (estPatron) return; // Le boss est ignoré pour les visites terrain
+        
+        // 🛑 RÈGLE STRICTE : Si le message contient "$", c'est une pénalité, on l'ignore !
+        if (texteStocke.includes('$')) {
+            console.log("⚠️ Pénalité détectée dans PR Terrain -> Ignorée comme visite.");
+            return;
+        }
         
         await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
         
@@ -570,7 +576,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
     // 3️⃣ GROUPE : PENALITy QS all shop
     if (jid === '243907634105-1540987363@g.us') {
-        if (estPatron) return; 
+        // 🟢 NOUVELLE RÈGLE : On ne bloque plus le patron ici !
+        // (Le "if (estPatron) return;" a été supprimé).
 
         // Filtre la branche Kinkole
         if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
