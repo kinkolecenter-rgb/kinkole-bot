@@ -16,13 +16,15 @@ model Shop {
 }
 
 model Manager {
-  jid              String    @id
-  nom              String    
-  role             String    @default("Manager")
+  jid              String            @id
+  nom              String            
+  role             String            @default("Manager")
   shopId           Int?
-  shop             Shop?     @relation(fields: [shopId], references: [id])
+  shop             Shop?             @relation(fields: [shopId], references: [id])
   rapports         Report[]
   incidentsCloture IncidentCloture[] // 👈 Nouveau lien pour tracker qui doit quoi
+  visites          VisiteTerrain[]   // 👈 Lien vers les visites terrain
+  penalites        Penalite[]        // 👈 Lien vers les pénalités
 }
 
 model Message {
@@ -60,15 +62,51 @@ model Incident {
 }
 
 // ==========================================
-// 🚨 NOUVELLE TABLE : SUIVI DES NON-CLÔTURÉS
+// 🚨 SUIVI DES NON-CLÔTURÉS
 // ==========================================
 model IncidentCloture {
   id              String    @id @default(uuid())
   machineId       String    // L'ID de la machine (ex: 342135)
   montant         String?   // Le montant retenu (ex: 337950)
-  statut          String    @default("NON_RESOLU") // "NON_RESOLU" par défaut
+  statut          String    @default("NON_RESOLU") 
   dateDeclaration DateTime  @default(now())
   dateResolution  DateTime? // Sera rempli quand le manager annoncera "résolu"
   managerJid      String
   manager         Manager   @relation(fields: [managerJid], references: [jid])
+}
+
+// ==========================================
+// 📍 GESTION DES VISITES SUR LE TERRAIN
+// ==========================================
+model VisiteTerrain {
+  id          Int      @id @default(autoincrement())
+  agentId     String   
+  branche     String   
+  pdv         String   
+  statut      String   
+  tickets     Int      
+  heureVisite String   
+  texteBrut   String   @db.Text
+  dateVisite  DateTime @default(now())
+  
+  // 🔗 Relation avec le Manager (Contrôleur)
+  managerJid  String
+  manager     Manager  @relation(fields: [managerJid], references: [jid])
+}
+
+// ==========================================
+// 🚨 GESTION DES PÉNALITÉS
+// ==========================================
+model Penalite {
+  id          Int      @id @default(autoincrement())
+  agentId     String   
+  branche     String   
+  motif       String   
+  montant     String   
+  texteBrut   String   @db.Text
+  dateSaisie  DateTime @default(now())
+  
+  // 🔗 Relation avec le Manager (Contrôleur)
+  managerJid  String
+  manager     Manager  @relation(fields: [managerJid], references: [jid])
 }
