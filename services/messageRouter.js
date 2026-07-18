@@ -364,23 +364,47 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     };
     const messageAnalyse = analyserMessage(messageBase);
 
-    // Sauvegarde en mémoire Redis (avec catégorie)
-    await memoire.sauvegarderMessage(jid, messageAnalyse);
-
-    // Sauvegarde dans PostgreSQL
-    let messageDbId = null; // 👈 On prépare une variable pour le vrai ID
-    try {
-        await db.upsertManager(participantJid, expediteur);
-        const savedMsg = await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
-        if (savedMsg && savedMsg.id) messageDbId = savedMsg.id; // 👈 On capture l'ID généré par Prisma !
-    } catch (e) {}
+    // ==========================================
+    // 🛑 FILTRE ANTI-POLLUTION (REDIS + DB + STATS)
+    // ==========================================
+    const estGroupeVisiteAllShop = (jid === '243900435187-1578719495@g.us');
+    const estGroupePenaliteAllShop = (jid === '243907634105-1540987363@g.us');
     
-    // Fix 5 : enregistrer activité manager avec catégorie
-    if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(redisClient);
-    await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
+    let doitSauvegarder = true;
+
+    // Si le message vient de ces deux groupes précis, on exige "Kinkole"
+    if (estGroupeVisiteAllShop || estGroupePenaliteAllShop) {
+        if (!texteNormalise.includes('kinkole') && !texteNormalise.includes('kinko')) {
+            doitSauvegarder = false; // On bloque TOUT pour Mateté, DGC, etc.
+        }
+    }
+
+    let messageDbId = null;
+
+    if (doitSauvegarder) {
+        // 1. Sauvegarde en mémoire Redis (IA)
+        await memoire.sauvegarderMessage(jid, messageAnalyse);
+
+        // 2. Sauvegarde dans PostgreSQL conditionnelle
+        try {
+            await db.upsertManager(participantJid, expediteur);
+            const savedMsg = await db.sauvegarderMessage(jid, participantJid, texteStocke, estMedia);
+            if (savedMsg && savedMsg.id) messageDbId = savedMsg.id;
+        } catch (e) {
+            console.error('⚠️ Erreur DB Sauvegarde Brute:', e.message);
+        }
+        
+        // 3. Enregistrer activité manager avec catégorie (Statistiques)
+        if (!gestionnaireManagers) gestionnaireManagers = creerGestionnaireManagers(redisClient);
+        await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
+        
+    } else {
+        console.log(`🚫 [FILTRE GLOBAL] Message de ${expediteur} ignoré (Hors Kinkole).`);
+    }
 
     const heureActuelle = new Date().getHours();
 
+    
     // =================================================================
     // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE — UNIQUEMENT DANS SYNCHRO
     // =================================================================
