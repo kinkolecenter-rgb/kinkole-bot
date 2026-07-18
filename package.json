@@ -18,7 +18,9 @@
     "node-cron": "^3.0.3",
     "ioredis": "^5.4.1",
     "pino": "^9.7.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "googleapis": "^140.0.0",
+    "autre-librairie": "x.x.x"
   },
   "devDependencies": {
     "prisma": "^5.10.0"
