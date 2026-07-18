@@ -205,6 +205,14 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         if (msg.key.fromMe) continue;
         const jid = msg.key.remoteJid;
 
+        // 📡 LE MOUCHARD : Intercepte TOUS les groupes, même non surveillés !
+        if (jid.includes('@g.us')) {
+            const texteTest = extraireTexte(msg);
+            if (texteTest.toLowerCase().includes('rapport agent') || texteTest.toLowerCase().includes('pénalité')) {
+                console.log(`📡 [MOUCHARD GROUPE] JID: ${jid} | Texte: ${texteTest.substring(0, 40)}...`);
+            }
+        }
+
         // =========================================================
         // 👑 INTERCEPTEUR : COMMANDES SECRÈTES DU PATRON (EN PRIVÉ)
         // =========================================================
