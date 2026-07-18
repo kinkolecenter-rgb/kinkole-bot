@@ -225,18 +225,24 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         }
 
         // ==========================================
-        // 💰 INTERCEPTEUR GLOBAL : RAPPORTS USD (Dimercia & PR Terrain UNIQUEMENT)
+        // 💰 INTERCEPTEUR GLOBAL : RAPPORTS USD (Privé & PR Terrain)
         // ==========================================
-        const texteMessage = extraireTexte(msg);
-        // On sécurise l'affichage du nom (enlève le :XX de l'appareil)
-        const expediteurMessage = msg.pushName || jid.split('@')[0].split(':')[0] || 'Inconnu';
-        const matchUsd = texteMessage.match(/([\d\s.,]+)\s*\$/);
+        const texteMessage = extraireTexte(msg) || '';
         
-        // 🚨 CORRECTION : On utilise .includes pour ignorer le numéro d'appareil (:5, :2, etc.)
-        const estDimercia = jid.includes(config.secondaireNumero);
+        // 🚨 On extrait le VRAI numéro brut (en ignorant le :15 des appareils liés)
+        const numeroBrut = jid.split('@')[0].split(':')[0]; 
+        const nomExpediteur = msg.pushName || numeroBrut;
+        
+        // Vérification de sécurité (Toi ou Dimercia)
+        const numAutorises = [String(config.monNumero), String(config.secondaireNumero)];
+        const estMessagePriveAutorise = !jid.includes('@g.us') && numAutorises.includes(numeroBrut);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        if ((estGroupePRTerrain || estDimercia) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
+        // 🚨 Nouvelle formule (Regex) : N'attrape QUE les chiffres et les points avant le $
+        const matchUsd = texteMessage.match(/([\d.,]+)\s*\$/);
+
+        // Si c'est autorisé ET qu'on a trouvé un montant $ ET le mot USD
+        if ((estGroupePRTerrain || estMessagePriveAutorise) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
             
             // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
             const heureMessage = new Date().getHours();
@@ -244,33 +250,32 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
 
             if (estDansCreneau) {
                 // Nettoyage : 5.660 devient 5660
-                const texteNettoye = matchUsd[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+                const texteNettoye = matchUsd[1].replace(/\./g, '').replace(',', '.');
                 const montantPropre = parseFloat(texteNettoye);
                 
-                console.log(`💸 Montant USD détecté (par ${expediteurMessage}) : ${montantPropre}$`);
+                console.log(`💸 Montant USD détecté (par ${nomExpediteur}) : ${montantPropre}$`);
                 
-                // Envoi immédiat vers Google Sheets !
+                // Envoi immédiat vers Google Sheets
                 const sheet = require('./googleSheets');
                 await sheet.enregistrerRecetteUSD(montantPropre);
                 
-                // On te prévient en privé
+                // Te prévenir sur ton numéro principal
                 await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${expediteurMessage}*).` 
+                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${nomExpediteur}*).` 
                 });
 
-                // Si c'est Dimercia en privé, on lui confirme
-                if (estDimercia) {
-                    await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès dans Google Sheets.` });
-                    continue; // 👈 On stoppe ici pour ce message
+                // Si c'est en privé (Dimercia), on lui répond ET ON ARRÊTE LE CODE (continue)
+                if (estMessagePriveAutorise) {
+                    await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès.` });
+                    continue; // 👈 BLOQUE DÉFINITIVEMENT L'IA POUR CE MESSAGE
                 }
 
             } else {
                 console.log(`⏳ Montant USD ignoré : détecté à ${heureMessage}h (Hors créneau 22h-5h).`);
                 
-                // Si c'est Dimercia en privé, on lui explique pourquoi on refuse
-                if (estDimercia) {
+                if (estMessagePriveAutorise) {
                     await sock.sendMessage(jid, { text: `❌ Enregistrement refusé. Le rapport USD n'est accepté qu'entre 22h00 et 04h59.\nHeure actuelle : ${heureMessage}h.` });
-                    continue; // 👈 On stoppe ici pour ce message
+                    continue; // 👈 BLOQUE DÉFINITIVEMENT L'IA MÊME EN CAS DE REFUS
                 }
             }
         }
