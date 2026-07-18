@@ -224,6 +224,55 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
             }
         }
 
+        // ==========================================
+        // 💰 INTERCEPTEUR GLOBAL : RAPPORTS USD (Dimercia & PR Terrain UNIQUEMENT)
+        // ==========================================
+        const texteMessage = extraireTexte(msg);
+        const expediteurMessage = msg.pushName || jid.split('@')[0] || 'Inconnu';
+        const matchUsd = texteMessage.match(/([\d\s.,]+)\s*\$/);
+        
+        const jidDimercia = `${config.secondaireNumero}@s.whatsapp.net`; 
+        const estGroupePRTerrain = (jid === '120363040045715280@g.us');
+
+        if ((estGroupePRTerrain || jid === jidDimercia) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
+            
+            // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
+            const heureMessage = new Date().getHours();
+            const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
+
+            if (estDansCreneau) {
+                // Nettoyage : 5.660 devient 5660
+                const texteNettoye = matchUsd[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+                const montantPropre = parseFloat(texteNettoye);
+                
+                console.log(`💸 Montant USD détecté (par ${expediteurMessage}) : ${montantPropre}$`);
+                
+                // Envoi immédiat vers Google Sheets !
+                const sheet = require('./googleSheets');
+                await sheet.enregistrerRecetteUSD(montantPropre);
+                
+                // On te prévient en privé
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${expediteurMessage}*).` 
+                });
+
+                // Si c'est Dimercia en privé, on lui confirme et on arrête le traitement de ce message
+                if (jid === jidDimercia) {
+                    await sock.sendMessage(jid, { text: `✅ Bien reçu Dimercia ! La recette de ${montantPropre}$ a été enregistrée avec succès dans Google Sheets.` });
+                    continue; // 👈 On passe au message suivant (évite de réveiller l'IA)
+                }
+
+            } else {
+                console.log(`⏳ Montant USD ignoré : détecté à ${heureMessage}h (Hors créneau 22h-5h).`);
+                
+                // Si c'est Dimercia en privé, on lui explique pourquoi on refuse
+                if (jid === jidDimercia) {
+                    await sock.sendMessage(jid, { text: `❌ Enregistrement refusé. Le rapport USD n'est accepté qu'entre 22h00 et 04h59.\nHeure actuelle : ${heureMessage}h.` });
+                    continue; // 👈 On passe au message suivant
+                }
+            }
+        }
+
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
@@ -590,35 +639,9 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     // 1️⃣ GROUPE : Rapport PR terrain kinko
     if (jid === '120363040045715280@g.us') {
         
-        // 💰 EXTRACTION DU MONTANT USD
-        const matchUsd = texteStocke.match(/(\d+[.,\s]?\d*)\s*\$/);
-        
-        if (matchUsd) {
-            // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
-            const heureMessage = new Date().getHours();
-            const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
+        // (L'extraction USD est maintenant gérée plus haut par l'intercepteur global)
 
-            if (estDansCreneau) {
-                // Nettoyage du format (enlève les espaces et remplace virgule par point)
-                const montantPropre = parseFloat(matchUsd[1].replace(/\s/g, '').replace(',', '.'));
-                
-                console.log(`💸 Montant USD détecté dans le créneau (par ${expediteur}) : ${montantPropre}$`);
-                
-                // Envoi immédiat vers Google Sheets !
-                const sheet = require('./googleSheets');
-                await sheet.enregistrerRecetteUSD(montantPropre);
-                
-                // On te prévient en privé
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${expediteur}*).` 
-                });
-            } else {
-                console.log(`⏳ Montant USD ignoré : ${matchUsd[1]}$ détecté à ${heureMessage}h (Hors créneau 22h-5h).`);
-            }
-        }
-
-        // 🛑 MAINTENANT on bloque le boss/secondaire pour la suite du workflow
-        // (Pour éviter que tes propres messages soient transférés comme si tu étais un agent)
+        // 🛑 On bloque le boss/secondaire pour la suite du workflow
         if (estPatron) return; 
 
         // 🛑 On vérifie que c'est un vrai rapport d'agent avant de transférer
@@ -632,7 +655,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
         return;
     }
-
+    
     // 2️⃣ GROUPE : Agent en ordre & Visité
     if (jid === '243900435187-1578719495@g.us') { 
         if (estPatron) return; 
