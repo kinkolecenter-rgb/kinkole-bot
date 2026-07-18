@@ -330,10 +330,16 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         participantJid === '204685424214253@lid'
     );
 
-    const estDansSynchro = (jid === GROUPE_SYNCHRO);
+    // 🟢 On définit les groupes "Ouverts" où les agents de terrain ont le droit de parler
+    const estGroupeOuvert = (
+        jid === GROUPE_SYNCHRO || 
+        jid === '120363040045715280@g.us' ||      // Rapport PR terrain
+        jid === '243900435187-1578719495@g.us' || // Agent Visité
+        jid === '243907634105-1540987363@g.us'    // Pénalités
+    );
 
-    if (!estDansSynchro && !estManagerAutorise && !estPatron) {
-        return; 
+    if (!estGroupeOuvert && !estManagerAutorise && !estPatron) {
+        return; // Le vigile bloque
     }
 
     const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
