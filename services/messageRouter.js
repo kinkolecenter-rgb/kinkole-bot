@@ -228,13 +228,15 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         // 💰 INTERCEPTEUR GLOBAL : RAPPORTS USD (Dimercia & PR Terrain UNIQUEMENT)
         // ==========================================
         const texteMessage = extraireTexte(msg);
-        const expediteurMessage = msg.pushName || jid.split('@')[0] || 'Inconnu';
+        // On sécurise l'affichage du nom (enlève le :XX de l'appareil)
+        const expediteurMessage = msg.pushName || jid.split('@')[0].split(':')[0] || 'Inconnu';
         const matchUsd = texteMessage.match(/([\d\s.,]+)\s*\$/);
         
-        const jidDimercia = `${config.secondaireNumero}@s.whatsapp.net`; 
+        // 🚨 CORRECTION : On utilise .includes pour ignorer le numéro d'appareil (:5, :2, etc.)
+        const estDimercia = jid.includes(config.secondaireNumero);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        if ((estGroupePRTerrain || jid === jidDimercia) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
+        if ((estGroupePRTerrain || estDimercia) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
             
             // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
             const heureMessage = new Date().getHours();
@@ -256,23 +258,23 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                     text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${expediteurMessage}*).` 
                 });
 
-                // Si c'est Dimercia en privé, on lui confirme et on arrête le traitement de ce message
-                if (jid === jidDimercia) {
-                    await sock.sendMessage(jid, { text: `✅ Bien reçu Dimercia ! La recette de ${montantPropre}$ a été enregistrée avec succès dans Google Sheets.` });
-                    continue; // 👈 On passe au message suivant (évite de réveiller l'IA)
+                // Si c'est Dimercia en privé, on lui confirme
+                if (estDimercia) {
+                    await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès dans Google Sheets.` });
+                    continue; // 👈 On stoppe ici pour ce message
                 }
 
             } else {
                 console.log(`⏳ Montant USD ignoré : détecté à ${heureMessage}h (Hors créneau 22h-5h).`);
                 
                 // Si c'est Dimercia en privé, on lui explique pourquoi on refuse
-                if (jid === jidDimercia) {
+                if (estDimercia) {
                     await sock.sendMessage(jid, { text: `❌ Enregistrement refusé. Le rapport USD n'est accepté qu'entre 22h00 et 04h59.\nHeure actuelle : ${heureMessage}h.` });
-                    continue; // 👈 On passe au message suivant
+                    continue; // 👈 On stoppe ici pour ce message
                 }
             }
         }
-
+        
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
