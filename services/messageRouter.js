@@ -589,21 +589,45 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
     
     // 1️⃣ GROUPE : Rapport PR terrain kinko
     if (jid === '120363040045715280@g.us') {
-        if (estPatron) return; // Le boss est ignoré
         
-        // 🛑 CADENAS 1 : Si le message contient "$", c'est une pénalité, on bloque !
-        if (texteStocke.includes('$')) {
-            console.log("⚠️ Pénalité ignorée dans le groupe PR Terrain.");
-            return;
+        // 💰 EXTRACTION DU MONTANT USD
+        const matchUsd = texteStocke.match(/(\d+[.,\s]?\d*)\s*\$/);
+        
+        if (matchUsd) {
+            // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
+            const heureMessage = new Date().getHours();
+            const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
+
+            if (estDansCreneau) {
+                // Nettoyage du format (enlève les espaces et remplace virgule par point)
+                const montantPropre = parseFloat(matchUsd[1].replace(/\s/g, '').replace(',', '.'));
+                
+                console.log(`💸 Montant USD détecté dans le créneau (par ${expediteur}) : ${montantPropre}$`);
+                
+                // Envoi immédiat vers Google Sheets !
+                const sheet = require('./googleSheets');
+                await sheet.enregistrerRecetteUSD(montantPropre);
+                
+                // On te prévient en privé
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${expediteur}*).` 
+                });
+            } else {
+                console.log(`⏳ Montant USD ignoré : ${matchUsd[1]}$ détecté à ${heureMessage}h (Hors créneau 22h-5h).`);
+            }
         }
 
-        // 🛑 CADENAS 2 : Si ce n'est pas un vrai rapport (pas de P.d.v ni de tickets), on bloque !
+        // 🛑 MAINTENANT on bloque le boss/secondaire pour la suite du workflow
+        // (Pour éviter que tes propres messages soient transférés comme si tu étais un agent)
+        if (estPatron) return; 
+
+        // 🛑 On vérifie que c'est un vrai rapport d'agent avant de transférer
         if (!texteNormalise.includes('p.d.v') && !texteNormalise.includes('pdv') && !texteNormalise.includes('ticket')) {
             console.log(`⚠️ Message ignoré (hors sujet) : ${texteStocke.substring(0, 20)}...`);
             return; 
         }
         
-        // ✅ Si on arrive ici, c'est un vrai rapport de visite parfait
+        // ✅ C'est un vrai rapport de visite, on sauvegarde
         await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
         await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
         return;
