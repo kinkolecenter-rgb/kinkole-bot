@@ -330,9 +330,12 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         participantJid === '204685424214253@lid'
     );
 
+    // 👇 LA LIGNE MANQUANTE À REMETTRE ICI :
+    const estDansSynchro = (jid === GROUPE_SYNCHRO);
+
     // 🟢 On définit les groupes "Ouverts" où les agents de terrain ont le droit de parler
     const estGroupeOuvert = (
-        jid === GROUPE_SYNCHRO || 
+        estDansSynchro || 
         jid === '120363040045715280@g.us' ||      // Rapport PR terrain
         jid === '243900435187-1578719495@g.us' || // Agent Visité
         jid === '243907634105-1540987363@g.us'    // Pénalités
