@@ -229,19 +229,24 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         // ==========================================
         const texteMessage = extraireTexte(msg) || '';
         
-        // 🚨 On extrait le VRAI numéro brut (en ignorant le :15 des appareils liés)
-        const numeroBrut = jid.split('@')[0].split(':')[0]; 
-        const nomExpediteur = msg.pushName || numeroBrut;
+        // 🚨 On extrait l'identifiant brut (Numéro ou LID, sans le :15)
+        const idBrut = jid.split('@')[0].split(':')[0]; 
+        const nomExpediteur = msg.pushName || idBrut;
         
-        // Vérification de sécurité (Toi ou Dimercia)
-        const numAutorises = [String(config.monNumero), String(config.secondaireNumero)];
-        const estMessagePriveAutorise = !jid.includes('@g.us') && numAutorises.includes(numeroBrut);
+        // 🔑 AJOUT CRITIQUE : On vérifie le Numéro ET le LID !
+        const identifiantsAutorises = [
+            String(config.monNumero), 
+            String(config.secondaireNumero),
+            String(config.monLid),         // Ton LID
+            String(config.secondaireLid)   // Le LID de Dimercia (138277243904251)
+        ];
+        
+        const estMessagePriveAutorise = !jid.includes('@g.us') && identifiantsAutorises.includes(idBrut);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        // 🚨 Nouvelle formule (Regex) : N'attrape QUE les chiffres et les points avant le $
+        // Formule stricte pour attraper 5.660
         const matchUsd = texteMessage.match(/([\d.,]+)\s*\$/);
 
-        // Si c'est autorisé ET qu'on a trouvé un montant $ ET le mot USD
         if ((estGroupePRTerrain || estMessagePriveAutorise) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
             
             // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
@@ -264,10 +269,10 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                     text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${nomExpediteur}*).` 
                 });
 
-                // Si c'est en privé (Dimercia), on lui répond ET ON ARRÊTE LE CODE (continue)
+                // Si c'est en privé (Dimercia), on lui répond ET on arrête le code
                 if (estMessagePriveAutorise) {
                     await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès.` });
-                    continue; // 👈 BLOQUE DÉFINITIVEMENT L'IA POUR CE MESSAGE
+                    continue; // 👈 BLOQUE L'IA
                 }
 
             } else {
@@ -275,11 +280,10 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                 
                 if (estMessagePriveAutorise) {
                     await sock.sendMessage(jid, { text: `❌ Enregistrement refusé. Le rapport USD n'est accepté qu'entre 22h00 et 04h59.\nHeure actuelle : ${heureMessage}h.` });
-                    continue; // 👈 BLOQUE DÉFINITIVEMENT L'IA MÊME EN CAS DE REFUS
+                    continue; // 👈 BLOQUE L'IA
                 }
             }
         }
-        
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
