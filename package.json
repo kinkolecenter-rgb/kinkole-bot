@@ -19,8 +19,7 @@
     "ioredis": "^5.4.1",
     "pino": "^9.7.0",
     "qrcode": "^1.5.4",
-    "googleapis": "^140.0.0",
-    "autre-librairie": "x.x.x"
+    "googleapis": "^140.0.0"
   },
   "devDependencies": {
     "prisma": "^5.10.0"
