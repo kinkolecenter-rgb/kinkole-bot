@@ -178,6 +178,32 @@ function contiendIdsSeuls(texte) {
     return lignes.some(l => regexIdSeul.test(l));
 }
 
+/**
+ * Extrait les IDs résolus d'un texte spontané ligne par ligne.
+ * Ignore totalement les IDs situés sur une ligne contenant "non", "pas" ou "persiste".
+ */
+function extraireIdsResolusSecurise(texte) {
+    const ids = [];
+    const lignes = (texte || '').split('\n'); // Découpe le message ligne par ligne
+    
+    for (let ligne of lignes) {
+        const ligneNorm = ligne.toLowerCase();
+        
+        // La ligne contient-elle une victoire ?
+        const contientResolu = ligneNorm.includes('resolu') || ligneNorm.includes('résolu') || ligneNorm.includes('regle') || ligneNorm.includes('réglé');
+        
+        // La ligne contient-elle une négation ?
+        const contientNegation = ligneNorm.includes('non') || ligneNorm.includes('pas') || ligneNorm.includes('persiste');
+        
+        // Si c'est résolu ET qu'il n'y a aucune négation sur la ligne
+        if (contientResolu && !contientNegation) {
+            const matchs = ligne.match(/\b\d{5,7}\b/g); // On attrape les IDs de 5 à 7 chiffres
+            if (matchs) ids.push(...matchs);
+        }
+    }
+    return [...new Set(ids)]; // Enlève les doublons
+}
+
 async function traiterIncidentsValides(sock, incidents, expediteur, participantJid) {
     const idsEnregistres = [];
     const idSuivisAffiche = [];
@@ -325,20 +351,20 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
             continue;
         }
 
-        // Fix 17 : intercepter "résolu" dans le groupe Disparus
+        // Fix 17 : intercepter "résolu" dans le groupe Disparus avec la NOUVELLE SÉCURITÉ
         if (jid === GROUPE_DISPARUS) {
             const texteBrut = extraireTexte(msg);
-            const texteNorm = (texteBrut || '').toLowerCase();
-            if (texteNorm.includes('resolu') || texteNorm.includes('résolu')) {
-                const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
-                if (idsResolus && idsResolus.length > 0) {
-                    for (const machineId of idsResolus) {
-                        try { await db.marquerIncidentResolu(machineId); } catch (e) {}
-                    }
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                        text: `✅ Résolution capturée depuis Disparus : IDs ${idsResolus.join(', ')} marqués résolus en DB.`
-                    });
+            
+            // 🚨 Utilise la nouvelle fonction sécurisée !
+            const idsResolus = extraireIdsResolusSecurise(texteBrut); 
+
+            if (idsResolus && idsResolus.length > 0) {
+                for (const machineId of idsResolus) {
+                    try { await db.marquerIncidentResolu(machineId); } catch (e) {}
                 }
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                    text: `✅ Résolution capturée depuis Disparus : IDs ${idsResolus.join(', ')} marqués résolus en DB.`
+                });
             }
             continue;
         }
@@ -525,6 +551,11 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
         const estNonCloture = !estRapportAutre && (
             // Formulations directes
+            const estNonCloture = !estRapportAutre && (
+            // Formulations directes (ajout des "é" finaux)
+            texteNormalise.includes('non cloturé') || 
+            texteNormalise.includes('non clôturé') || 
+            // (Laisse le reste de tes conditions telles quelles...)
             texteNormalise.includes('non cloture') || 
             texteNormalise.includes('non clôture') || 
             texteNormalise.includes('non cloturer') ||
@@ -646,7 +677,9 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         // 🟢 CAS B : RÉSOLUTION D'UN INCIDENT
         // ─────────────────────────────────────────────────────────
         if (estResolution) {
-            const idsResolus = texteBrut.match(/\b\d{5,7}\b/g);
+            
+            // 🚨 Utilise la nouvelle fonction sécurisée !
+            const idsResolus = extraireIdsResolusSecurise(texteBrut);
             
             if (idsResolus && idsResolus.length > 0) {
                 for (const machineId of idsResolus) {
