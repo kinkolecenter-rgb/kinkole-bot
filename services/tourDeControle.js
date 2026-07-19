@@ -74,6 +74,7 @@ function initialiserTourDeControle(sock, etatAttenteRef, memoire, redisClientRef
 
 /**
  * Vérifie la DB et envoie un rappel si le rapport n'a pas été reçu aujourd'hui
+ * Cible uniquement les responsables réels en service entre 16h et 23h
  */
 async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
     try {
@@ -81,15 +82,37 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         const rapportsDuJour = await db.getReportsAujourdhui(typeRapport);
 
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
-            // Fix 11 : identifier quel manager devait envoyer ce rapport
             let responsable = '';
             try {
-                const managers = await db.prisma.manager.findMany({ select: { nom: true, role: true } });
-                if (managers && managers.length > 0) {
-                    const noms = managers.map(m => m.nom).join(', ');
-                    responsable = `\n👤 *Responsables en service :* ${noms}`;
+                const debutService = new Date();
+                debutService.setHours(16, 0, 0, 0);
+                const finService = new Date();
+                finService.setHours(23, 0, 0, 0);
+
+                const messagesService = await db.prisma.message.findMany({
+                    where: { groupeJid: GROUPE_SYNCHRO, createdAt: { gte: debutService, lte: finService } },
+                    select: { senderJid: true },
+                    distinct: ['senderJid']
+                });
+
+                if (messagesService && messagesService.length > 0) {
+                    const jidsEnService = messagesService.map(m => m.senderJid);
+                    const managersActifs = await db.prisma.manager.findMany({
+                        where: { jid: { in: jidsEnService } },
+                        select: { nom: true }
+                    });
+
+                    if (managersActifs && managersActifs.length > 0) {
+                        const noms = managersActifs.map(m => m.nom).join(', ');
+                        responsable = `\n👤 *Responsables en service (16h-23h) :* ${noms}`;
+                    }
                 }
-            } catch (e) {}
+                
+                if (!responsable) responsable = `\n👤 *Responsables en service :* Aucun manager détecté actif dans Synchro depuis 16h.`;
+
+            } catch (e) {
+                console.error('⚠️ Erreur filtrage managers en service:', e.message);
+            }
 
             const messageAlerte = `⚠️ *ALERTE MANAGER* ⚠️\n\nL'heure limite est dépassée.\nLe rapport *${nomRapport}* n'a toujours pas été reçu.${responsable}\n\nMerci de l'envoyer immédiatement.`;
             await sock.sendMessage(groupeId, { text: messageAlerte });
@@ -105,7 +128,7 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
 }
 
 /**
- * 🚨 Rappels ciblés par ID (10h, 16h, 22h45) — Un message par ID pour forcer une réponse
+ * Rappels ciblés et groupés en un unique message compact
  */
 async function rappelerIncidentsActifs(sock, groupeId) {
     try {
@@ -113,17 +136,27 @@ async function rappelerIncidentsActifs(sock, groupeId) {
         
         if (!incidents || incidents.length === 0) return;
 
-        for (const inc of incidents) {
-            const msgRelance = `⚠️ *SUIVI NON CLÔTURÉ* ⚠️\n\nEst-ce que l'ID *${inc.machineId}* a clôturé ?\n\n👉 Répondez :\n• *${inc.machineId} résolu* — si le problème est réglé\n• *${inc.machineId} non résolu* — si ça persiste`;
-            await sock.sendMessage(groupeId, { text: msgRelance });
-            // Pause entre chaque message pour éviter le spam
-            await new Promise(r => setTimeout(r, 1500));
+        const listeIds = [...new Set(incidents.map(inc => inc.machineId))];
+
+        let msgRelance = `⚠️ *SUIVI MACHINES NON CLÔTURÉES* ⚠️\n\n`;
+        msgRelance += `Il reste *${listeIds.length}* machine(s) en anomalie :\n`;
+        listeIds.forEach(id => { msgRelance += `• *ID ${id}*\n`; });
+
+        msgRelance += `\n🤖 *Action requise pour le Manager :*\n`;
+        msgRelance += `Copiez et répondez avec le modèle ci-dessous pour mettre à jour les statuts :\n\n`;
+        msgRelance += `*Modèle de réponse :*\n\`\`\`\nNon clôturé\n`;
+        listeIds.forEach(id => { msgRelance += `${id} résolu\n`; });
+        msgRelance += `\`\`\``;
+
+        await sock.sendMessage(groupeId, { text: msgRelance });
+
+        if (etatAttente) {
+            etatAttente.set(groupeId, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
         }
     } catch (error) {
-        console.error(`❌ Erreur rappel incidents :`, error.message);
+        console.error(`❌ Erreur rappel incidents groupés :`, error.message);
     }
 }
-
 /**
  * 🛑 Vérification clôture à 23h00 pile
  * 
