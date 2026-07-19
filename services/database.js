@@ -138,35 +138,29 @@ async function marquerIncidentResolu(machineId) {
 // 📍 SAUVEGARDE DES VISITES TERRAIN (Mise à jour)
 // ==========================================
 async function sauvegarderVisiteTerrain(participantJid, texteBrut, typeVisite) {
-    
     // 1. LA MAGIE : NFKC transforme "𝙏𝙞𝙘𝙠𝙚𝙩" en "Ticket" et "🆔" en "ID"
-    // On enlève aussi les étoiles et les tirets du bas pour avoir un texte pur
     const texteNettoye = texteBrut.normalize('NFKC').replace(/\*/g, '').replace(/_/g, '');
 
     // 2. Extraction ultra-tolérante (Ligne par ligne)
-    
-    // PDV : Cherche pdv ou p.d.v, avec ou sans espaces/deux-points, et prend tout jusqu'à la fin de la ligne
     const matchPdv = texteNettoye.match(/p\.?d\.?v\.?\s*[:=\-]*\s*([^\n]+)/i);
     const pdv = matchPdv ? matchPdv[1].trim() : 'Non précisé';
 
-    // TICKETS : Cherche ticket ou tickets, prend les chiffres qui suivent
     const matchTickets = texteNettoye.match(/tickets?\s*[:=\-]*\s*(\d+)/i);
     const tickets = matchTickets ? parseInt(matchTickets[1], 10) : 0;
 
-    // STATUT : Cherche statut ou statuts, prend tout jusqu'à la fin de la ligne
     const matchStatut = texteNettoye.match(/statuts?\s*[:=\-]*\s*([^\n]+)/i);
     const statut = matchStatut ? matchStatut[1].trim() : 'ok'; // "ok" par défaut
 
-    // ID AGENT (Optionnel, au cas où tu en as besoin) : 5 à 7 chiffres
     const matchId = texteNettoye.match(/(?:id|🆔)\s*[:=\-]*\s*(\d{5,7})/i) || texteNettoye.match(/\b(\d{5,7})\b/);
     const agentId = matchId ? matchId[1] : 'Inconnu';
 
     console.log(`✅ [EXTRACTION PR] ID: ${agentId} | PDV: ${pdv} | Tickets: ${tickets} | Statut: ${statut}`);
 
+    try {
         await prisma.visiteTerrain.create({
             data: {
                 agentId: agentId,
-                managerJid: managerJid,
+                managerJid: participantJid, // Corrigé : participantJid au lieu de managerJid
                 branche: "Kinkole",
                 pdv: pdv,
                 statut: statut, 
@@ -185,32 +179,26 @@ async function sauvegarderVisiteTerrain(participantJid, texteBrut, typeVisite) {
 // 🚨 SAUVEGARDE DES PÉNALITÉS (Filtre intelligent)
 // ==========================================
 async function sauvegarderPenalite(participantJid, texteBrut) {
-    // 1. Nettoyage initial (enlève les polices bizarres)
+    // 1. Nettoyage initial
     const texteNettoye = texteBrut.normalize('NFKC');
 
-    // 2. Extraire l'ID de l'agent (5 à 7 chiffres)
+    // 2. Extraire l'ID de l'agent
     const matchId = texteNettoye.match(/\b(\d{5,7})\b/);
     const agentId = matchId ? matchId[1] : 'Inconnu';
 
-    // 3. Extraire le montant (chiffre suivi de $ ou fc)
+    // 3. Extraire le montant
     const matchMontant = texteNettoye.match(/(\d+)\s*(\$|usd|fc|f)/i);
     const montant = matchMontant ? matchMontant[0].toUpperCase() : 'Non précisé';
 
     // 4. L'ASTUCE : Extraire le motif par "Soustraction"
     let motif = texteNettoye
-        // A. On efface les mots parasites
         .replace(/\b(pénalité|penalite|id|branche|shop|kinkole|kinko|matete|ngaba|lemba|bibwa|victoire)\b/gi, '') 
-        // B. On efface l'ID de l'agent
         .replace(/\b\d{5,7}\b/g, '') 
-        // C. On efface le montant
         .replace(/\d+\s*(\$|usd|fc|f)/gi, '') 
-        // D. On efface la ponctuation inutile (virgules, points, étoiles)
         .replace(/[,.:*]/g, ' ') 
-        // E. On nettoie les espaces en trop
         .replace(/\s+/g, ' ') 
         .trim();
 
-    // On met une belle majuscule au début
     if (motif.length > 0) {
         motif = motif.charAt(0).toUpperCase() + motif.slice(1);
     } else {
@@ -219,17 +207,18 @@ async function sauvegarderPenalite(participantJid, texteBrut) {
 
     console.log(`✅ [EXTRACTION PÉNALITÉ] ID: ${agentId} | Montant: ${montant} | Motif: ${motif}`);
 
+    try {
         await prisma.penalite.create({
             data: {
                 agentId: agentId,
-                managerJid: managerJid,
+                managerJid: participantJid, // Corrigé : participantJid
                 branche: "Kinkole",
-                motif: "Voir texte brut", 
+                motif: motif, // Corrigé : envoie le vrai motif au lieu de "Voir texte brut"
                 montant: montant,
                 texteBrut: texteBrut
             }
         });
-        console.log(`✅ Pénalité sauvegardée : Agent ${agentId} | Montant ${montant}`);
+        console.log(`✅ Pénalité sauvegardée : Agent ${agentId} | Montant ${montant} | Motif: ${motif}`);
     } catch (error) {
         console.error("❌ Erreur DB Pénalité:", error.message);
     }
