@@ -550,14 +550,11 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         );
 
         const estNonCloture = !estRapportAutre && (
-            // Formulations directes
-            const estNonCloture = !estRapportAutre && (
-            // Formulations directes (ajout des "é" finaux)
-            texteNormalise.includes('non cloturé') || 
-            texteNormalise.includes('non clôturé') || 
-            // (Laisse le reste de tes conditions telles quelles...)
+            // Formulations directes (avec les "é" ajoutés)
             texteNormalise.includes('non cloture') || 
             texteNormalise.includes('non clôture') || 
+            texteNormalise.includes('non cloturé') || 
+            texteNormalise.includes('non clôturé') || 
             texteNormalise.includes('non cloturer') ||
             texteNormalise.includes('non clôturer') ||
             texteNormalise.includes('pas cloture') || 
