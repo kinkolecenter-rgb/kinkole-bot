@@ -108,33 +108,63 @@ function extraireTexte(msg) {
 }
 
 /**
- * Parse les incidents au format "ID = Montant" (une paire par ligne)
- * Retourne [] si le format n'est pas respecté sur au moins une ligne valide
+ * Parse les incidents au format "ID = Montant" ou "ID Statut" (Matin)
+ * Capture tous les styles (* 779489 : 372.700fc | • 421596 = 150000 | 1134912 résolu)
  */
 function parserIncidentsFormat(texte) {
+    const texteSecurise = (texte || '').toLowerCase();
+
+    // 🛑 BARRIÈRE DE SÉCURITÉ ABSOLUE : Ignore les rapports de connexion
+    if (texteSecurise.includes('ids connecté') || 
+        texteSecurise.includes('plus des ticket') || 
+        texteSecurise.includes('moins 20 ticket') || 
+        texteSecurise.includes('instant win') ||
+        texteSecurise.includes('connexion 12h') ||
+        texteSecurise.includes('connexion 15h') ||
+        texteSecurise.includes('connexion 17h')) {
+        return [];
+    }
+
     const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
     const incidents = [];
 
-    // ✅ Format élargi — capture tous les styles réels des managers :
-    // "779489 : 372.700fc"  |  "* 779489 : 372.700fc"  |  "• 421596 = 150000"
-    // "- 1363049 : 290.450 FC"  |  ". 421556=286350"
-    const regexLigne = /^[*\-•.\s]*([0-9]{5,7})\s*[=:]\s*([0-9.,]+)\s*(fc|FC|f|F)?/;
+    // ✅ NOUVEAU REGEX HYBRIDE : 
+    // - Capture l'ID : ([0-9]{5,7})
+    // - Accepte comme séparateur : = ou : ou même un simple espace \s*[=: ]\s*
+    // - Capture tout le reste de la ligne (montant + FC ou mot "résolu") : (.+)
+    const regexLigne = /^[*\-•.\s]*([0-9]{5,7})\s*[=: ]\s*(.+)$/;
 
     for (const ligne of lignes) {
-        if (/non.{0,10}cl/i.test(ligne)) continue;
-        if (/les\s+id/i.test(ligne)) continue;
-        if (/ids?\s+non/i.test(ligne)) continue;
-        if (/^[-*•=\s]+$/.test(ligne)) continue;
-        if (/^[0-9]{1,3}$/.test(ligne)) continue;
-        if (/^(aucun|ok|tout|bonsoir|bonjour)/i.test(ligne)) continue;
+        if (/non.{0,10}cl/i.test(ligne) || /les\s+id/i.test(ligne) || /ids?\s+non/i.test(ligne)) continue;
+        if (/^[-*•=\s]+$/.test(ligne) || /^[0-9]{1,3}$/.test(ligne) || /^(aucun|ok|tout|bonsoir|bonjour)/i.test(ligne)) continue;
 
         const match = ligne.match(regexLigne);
         if (match) {
-            const montantBrut = match[2].replace(/\./g, '').replace(',', '.');
-            incidents.push({ id: match[1], montant: montantBrut });
+            const idMachine = match[1];
+            let valeurBrute = match[2].trim().toLowerCase(); // Ex: "372.700fc" ou "résolu"
+
+            // ☀️ 1. CAS DU MATIN (Suivi de résolution)
+            if (valeurBrute.includes('non') || valeurBrute.includes('persiste')) {
+                incidents.push({ id: idMachine, montant: 'NON_RESOLU', type: 'suivi' });
+            } 
+            else if (valeurBrute.includes('resolu') || valeurBrute.includes('réglé') || valeurBrute.includes('regle')) {
+                incidents.push({ id: idMachine, montant: 'RESOLU', type: 'suivi' });
+            } 
+            // 🌙 2. CAS DU SOIR (Rapport financier : "372.700fc")
+            else {
+                // Nettoyage radical : Enlève tout ce qui n'est PAS un chiffre, un point ou une virgule
+                // Ça supprime automatiquement les "fc", "f", "FC" et les espaces !
+                const montantNettoye = valeurBrute.replace(/[^\d.,]/g, '');
+                
+                // On transforme 372.700 en 372700
+                const montantFinal = montantNettoye.replace(/\./g, '').replace(',', '.');
+                
+                if (!isNaN(montantFinal) && montantFinal.length > 0) {
+                    incidents.push({ id: idMachine, montant: montantFinal, type: 'argent' });
+                }
+            }
         }
     }
-
     return incidents;
 }
 
@@ -148,44 +178,49 @@ function contiendIdsSeuls(texte) {
     return lignes.some(l => regexIdSeul.test(l));
 }
 
-/**
- * Traite un rapport de non-clôturé valide (enregistre + publie dans disparus)
- */
 async function traiterIncidentsValides(sock, incidents, expediteur, participantJid) {
     const idsEnregistres = [];
+    const idSuivisAffiche = [];
 
     for (const inc of incidents) {
         try {
-            await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
-            idsEnregistres.push(inc.id);
+            if (inc.type === 'suivi') {
+                if (inc.montant === 'RESOLU') {
+                    await db.marquerIncidentResolu(inc.id);
+                    idSuivisAffiche.push(`✅ ID ${inc.id} marqué RÉSOLU`);
+                } else {
+                    idSuivisAffiche.push(`❌ ID ${inc.id} reste NON CLÔTURÉ`);
+                }
+            } else {
+                await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+                idsEnregistres.push(inc.id);
+            }
         } catch (err) {
             console.error('Erreur DB Incident:', err.message);
         }
     }
 
-    // Marque la journée comme traitée (annule la question de 23h)
+    if (idSuivisAffiche.length > 0) {
+        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+            text: `📊 *Suivi des non-clôturés par ${expediteur} :*\n\n${idSuivisAffiche.join('\n')}`
+        });
+        return idsEnregistres;
+    }
+
     try {
         await db.prisma.report.create({
             data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
         });
     } catch (e) {}
 
-    // Message public : IDs seulement, montants cachés
-    const phraseIds = idsEnregistres.length > 1
-        ? `les ids *${idsEnregistres.join(', ')}* n'ont pas clôturé`
-        : `l'id *${idsEnregistres[0]}* n'a pas clôturé`;
+    const phraseIds = idsEnregistres.length > 1 ? `les ids *${idsEnregistres.join(', ')}* n'ont pas clôturé` : `l'id *${idsEnregistres[0]}* n'a pas clôturé`;
+    await sock.sendMessage(GROUPE_DISPARUS, { text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}` });
 
-    await sock.sendMessage(GROUPE_DISPARUS, {
-        text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}`
-    });
-
-    // Toi tu reçois avec les montants
     const detail = incidents.map(i => `ID ${i.id} = ${i.montant}`).join('\n');
     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-        text: `⚠️ *NON CLÔTURÉ* déclaré par *${expediteur}*\n\n${detail}\n\n✅ Enregistré en DB. IDs publiés dans Disparus.`
+        text: `⚠️ *NON CLÔTURÉ* déclaré par *${expediteur}*\n\n${detail}\n\n✅ Enregistré en DB.`
     });
 
-    console.log(`✅ ${idsEnregistres.length} incident(s) traité(s) : ${idsEnregistres.join(', ')}`);
     return idsEnregistres;
 }
 
