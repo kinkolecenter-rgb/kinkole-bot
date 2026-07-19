@@ -89,9 +89,18 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
                 const finService = new Date();
                 finService.setHours(23, 0, 0, 0);
 
+                // 🔍 On cherche les messages uniques (Correction: timestamp au lieu de createdAt)
                 const messagesService = await db.prisma.message.findMany({
-                    where: { groupeJid: GROUPE_SYNCHRO, createdAt: { gte: debutService, lte: finService } },
-                    select: { senderJid: true },
+                    where: {
+                        groupeJid: GROUPE_SYNCHRO,
+                        timestamp: {
+                            gte: debutService,
+                            lte: finService
+                        }
+                    },
+                    select: {
+                        senderJid: true
+                    },
                     distinct: ['senderJid']
                 });
 
