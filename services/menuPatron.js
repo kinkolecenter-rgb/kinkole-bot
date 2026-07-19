@@ -304,9 +304,8 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
             const aujourdhui = new Date();
             aujourdhui.setHours(0, 0, 0, 0);
 
-            // On cherche qui a parlé dans le système aujourd'hui
             const messagesDuJour = await prisma.message.findMany({
-                where: { createdAt: { gte: aujourdhui } },
+                where: { timestamp: { gte: aujourdhui } },
                 select: { senderJid: true },
                 distinct: ['senderJid']
             });
