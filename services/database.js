@@ -137,23 +137,31 @@ async function marquerIncidentResolu(machineId) {
 // ==========================================
 // 📍 SAUVEGARDE DES VISITES TERRAIN (Mise à jour)
 // ==========================================
-async function sauvegarderVisiteTerrain(managerJid, texteBrut, typeRapport) {
-    try {
-        // 1. Extraction de l'ID (gère les emojis 🆔, les "ID :" et les nombres à partir de 3 chiffres)
-        const matchId = texteBrut.match(/(?:🆔|ID|id)\s*[:\-]?\s*(\d+)/i) || texteBrut.match(/\b(\d{3,7})\b/);
-        const agentId = matchId ? matchId[1] : "Inconnu";
+async function sauvegarderVisiteTerrain(participantJid, texteBrut, typeVisite) {
+    
+    // 1. LA MAGIE : NFKC transforme "𝙏𝙞𝙘𝙠𝙚𝙩" en "Ticket" et "🆔" en "ID"
+    // On enlève aussi les étoiles et les tirets du bas pour avoir un texte pur
+    const texteNettoye = texteBrut.normalize('NFKC').replace(/\*/g, '').replace(/_/g, '');
 
-        // 2. Extraction du P.d.v (Prend tout ce qui suit "P.d.v.:" jusqu'à la fin de la ligne)
-        const matchPdv = texteBrut.match(/P\.d\.v\.\s*[:\-]?\s*([^\n]+)/i);
-        const pdv = matchPdv ? matchPdv[1].trim() : "Non précisé";
+    // 2. Extraction ultra-tolérante (Ligne par ligne)
+    
+    // PDV : Cherche pdv ou p.d.v, avec ou sans espaces/deux-points, et prend tout jusqu'à la fin de la ligne
+    const matchPdv = texteNettoye.match(/p\.?d\.?v\.?\s*[:=\-]*\s*([^\n]+)/i);
+    const pdv = matchPdv ? matchPdv[1].trim() : 'Non précisé';
 
-        // 3. Extraction du Statut (Prend "ok" ou "pénalisé")
-        const matchStatut = texteBrut.match(/Statut\s*[:\-]?\s*([^\n]+)/i);
-        const statut = matchStatut ? matchStatut[1].trim() : typeRapport;
+    // TICKETS : Cherche ticket ou tickets, prend les chiffres qui suivent
+    const matchTickets = texteNettoye.match(/tickets?\s*[:=\-]*\s*(\d+)/i);
+    const tickets = matchTickets ? parseInt(matchTickets[1], 10) : 0;
 
-        // 4. Extraction des Tickets (Ne prend que les chiffres qui suivent "Ticket :")
-        const matchTickets = texteBrut.match(/Ticket\s*[:\-]?\s*(\d+)/i);
-        const tickets = matchTickets ? parseInt(matchTickets[1], 10) : 0;
+    // STATUT : Cherche statut ou statuts, prend tout jusqu'à la fin de la ligne
+    const matchStatut = texteNettoye.match(/statuts?\s*[:=\-]*\s*([^\n]+)/i);
+    const statut = matchStatut ? matchStatut[1].trim() : 'ok'; // "ok" par défaut
+
+    // ID AGENT (Optionnel, au cas où tu en as besoin) : 5 à 7 chiffres
+    const matchId = texteNettoye.match(/(?:id|🆔)\s*[:=\-]*\s*(\d{5,7})/i) || texteNettoye.match(/\b(\d{5,7})\b/);
+    const agentId = matchId ? matchId[1] : 'Inconnu';
+
+    console.log(`✅ [EXTRACTION PR] ID: ${agentId} | PDV: ${pdv} | Tickets: ${tickets} | Statut: ${statut}`);
 
         await prisma.visiteTerrain.create({
             data: {
@@ -176,14 +184,40 @@ async function sauvegarderVisiteTerrain(managerJid, texteBrut, typeRapport) {
 // ==========================================
 // 🚨 SAUVEGARDE DES PÉNALITÉS (Filtre intelligent)
 // ==========================================
-async function sauvegarderPenalite(managerJid, texteBrut) {
-    try {
-        const matchId = texteBrut.match(/\b(\d{5,7})\b/);
-        const agentId = matchId ? matchId[1] : "Sans ID";
+async function sauvegarderPenalite(participantJid, texteBrut) {
+    // 1. Nettoyage initial (enlève les polices bizarres)
+    const texteNettoye = texteBrut.normalize('NFKC');
 
-        // Extraction du montant (ex: 10$)
-        const matchMontant = texteBrut.match(/(\d+)\s*\$/);
-        const montant = matchMontant ? matchMontant[1] + "$" : "Non précisé";
+    // 2. Extraire l'ID de l'agent (5 à 7 chiffres)
+    const matchId = texteNettoye.match(/\b(\d{5,7})\b/);
+    const agentId = matchId ? matchId[1] : 'Inconnu';
+
+    // 3. Extraire le montant (chiffre suivi de $ ou fc)
+    const matchMontant = texteNettoye.match(/(\d+)\s*(\$|usd|fc|f)/i);
+    const montant = matchMontant ? matchMontant[0].toUpperCase() : 'Non précisé';
+
+    // 4. L'ASTUCE : Extraire le motif par "Soustraction"
+    let motif = texteNettoye
+        // A. On efface les mots parasites
+        .replace(/\b(pénalité|penalite|id|branche|shop|kinkole|kinko|matete|ngaba|lemba|bibwa|victoire)\b/gi, '') 
+        // B. On efface l'ID de l'agent
+        .replace(/\b\d{5,7}\b/g, '') 
+        // C. On efface le montant
+        .replace(/\d+\s*(\$|usd|fc|f)/gi, '') 
+        // D. On efface la ponctuation inutile (virgules, points, étoiles)
+        .replace(/[,.:*]/g, ' ') 
+        // E. On nettoie les espaces en trop
+        .replace(/\s+/g, ' ') 
+        .trim();
+
+    // On met une belle majuscule au début
+    if (motif.length > 0) {
+        motif = motif.charAt(0).toUpperCase() + motif.slice(1);
+    } else {
+        motif = 'Non précisé';
+    }
+
+    console.log(`✅ [EXTRACTION PÉNALITÉ] ID: ${agentId} | Montant: ${montant} | Motif: ${motif}`);
 
         await prisma.penalite.create({
             data: {
