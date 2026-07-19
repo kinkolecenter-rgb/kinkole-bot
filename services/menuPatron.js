@@ -25,65 +25,102 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
     const texteNormalise = texteBrut.trim().toLowerCase();
 
     // =========================================================
-    // 📊 COMMANDE : !bilan (Résumé de la journée)
+    // 📊 COMMANDE : !bilan (Traçage exact des Collaborateurs VIP)
     // =========================================================
     if (texteNormalise === '!bilan') {
-        await sock.sendMessage(jid, { text: "⏳ *Génération du Bilan Journalier en cours...*" });
+        await sock.sendMessage(jid, { text: "⏳ *Génération du Bilan VIP en cours...*" });
 
         try {
-            // On définit la plage d'aujourd'hui (de minuit à maintenant)
             const aujourdhui = new Date();
             aujourdhui.setHours(0, 0, 0, 0);
-            
-            // On récupère tous les rapports du jour
-            const rapportsDuJour = await prisma.report.findMany({
-                where: { timestamp: { gte: aujourdhui } },
-                include: { manager: true } // On inclut les infos du manager
+
+            // 1. Ta liste stricte de collaborateurs VIP à surveiller
+            const listeManagersVIP = {
+                '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
+                '90263603159168@lid':  { nom: 'Collaborateur 2', role: 'Manager' },
+                '42967356150013@lid':  { nom: 'Collaborateur 3', role: 'Ass. Manager' },
+                '265029714768018@lid': { nom: 'Collaborateur 4', role: 'Ass. Manager' },
+                '152059408036054@lid': { nom: 'Collaborateur 5', role: 'Manager' },
+                '169230989307948@lid': { nom: 'Collaborateur 6', role: 'Manager' },
+                '265515029283001@lid': { nom: 'Collaborateur 7', role: 'Ass. Manager' }
+            };
+
+            // 2. Dictionnaire exhaustif de tes 15 groupes surveillés
+            const groupesConnus = {
+                '120363021280044937@g.us': 'Synchro Kinkole',
+                '120363023010071105@g.us': 'Synchro Kinkole pos',
+                '120363025487823123@g.us': 'Winner Shop kinkole',
+                '120363040045715280@g.us': 'Rapport PR terrain',
+                '243907634105-1540987363@g.us': 'Pénalités QS',
+                '243900435187-1521782366@g.us': 'General Management',
+                '243900435187-1564931206@g.us': 'Évacuation Matériels',
+                '243890011696-1509543437@g.us': 'Winner printing group',
+                '120363039964661142@g.us': 'Printing Winner & Buco',
+                '243900435187-1560664753@g.us': 'Composition',
+                '243900435187-1543596785@g.us': 'Mukumbusu (Rapports)',
+                '120363024619387743@g.us': 'Suivi Carburant',
+                '243900435187-1564716535@g.us': 'Disparus',
+                '120363049897392666@g.us': 'Entre nous',
+                '243900435187-1578719495@g.us': 'Agent en ordre & Visité'
+            };
+
+            const jidsVIP = Object.keys(listeManagersVIP);
+
+            // 3. On récupère TOUS les messages envoyés par CES LIDs aujourd'hui, dans TOUS les groupes
+            const messagesVIP = await prisma.message.findMany({
+                where: {
+                    timestamp: { gte: aujourdhui },
+                    senderJid: { in: jidsVIP }
+                },
+                orderBy: { timestamp: 'asc' }
             });
 
-            if (rapportsDuJour.length === 0) {
-                await sock.sendMessage(jid, { text: "📊 *BILAN DU JOUR*\n\nLe calme plat. Aucun rapport n'a été reçu aujourd'hui." });
+            if (messagesVIP.length === 0) {
+                await sock.sendMessage(jid, { text: "📊 *BILAN DES COLLABORATEURS VIP*\n\nAucune activité détectée pour ces managers aujourd'hui." });
                 return true;
             }
 
-            // On trie les rapports par Manager
-            const rapportsParManager = {};
-            for (const r of rapportsDuJour) {
-                const nomManager = r.manager ? r.manager.nom : 'Manager Inconnu';
-                if (!rapportsParManager[nomManager]) {
-                    rapportsParManager[nomManager] = [];
+            // 4. On construit le message WhatsApp
+            let messageBilan = `📊 *BILAN DES COLLABORATEURS VIP* (${new Date().toLocaleDateString('fr-FR')})\n\n`;
+
+            for (const [lid, infos] of Object.entries(listeManagersVIP)) {
+                // On filtre les messages de ce manager spécifique
+                const msgsDuManager = messagesVIP.filter(m => m.senderJid === lid);
+                
+                if (msgsDuManager.length > 0) {
+                    messageBilan += `👤 *${infos.nom}* :\n`;
+                    
+                    for (const m of msgsDuManager) {
+                        // On trouve le nom du groupe (ou on garde "un groupe" si l'ID n'est pas dans le dictionnaire)
+                        let nomGroupe = groupesConnus[m.groupeJid] || 'un groupe';
+
+                        // On prend la première ligne du message pour faire un résumé propre
+                        let apercu = "Média / Image / Audio";
+                        if (m.texte) {
+                            // Trouve la première ligne qui n'est pas vide
+                            const lignes = m.texte.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                            if (lignes.length > 0) {
+                                // Coupe à 45 caractères pour ne pas faire un message kilométrique
+                                apercu = lignes[0].length > 45 ? lignes[0].substring(0, 45) + '...' : lignes[0];
+                            }
+                        }
+
+                        // Format final : ▪️ dans Composition : compo shift1
+                        messageBilan += `  ▪️ dans *${nomGroupe}* : _${apercu}_\n`;
+                    }
+                    messageBilan += `\n`;
                 }
-                rapportsParManager[nomManager].push(r.type);
             }
 
-            // On construit le beau message WhatsApp
-            let messageBilan = `📊 *BILAN DU JOUR* (${new Date().toLocaleDateString()})\n\n`;
-            
-            for (const [nom, types] of Object.entries(rapportsParManager)) {
-                messageBilan += `👤 *${nom}* a envoyé :\n`;
-                
-                // On compte combien de fois chaque rapport a été envoyé (ex: 3x details_connexion)
-                const compteTypes = {};
-                types.forEach(t => compteTypes[t] = (compteTypes[t] || 0) + 1);
-                
-                for (const [type, count] of Object.entries(compteTypes)) {
-                    // On rend le texte plus joli (enlève les tirets du bas)
-                    const nomJoli = type.replace(/_/g, ' ').toUpperCase();
-                    messageBilan += `   ▪️ ${nomJoli} (x${count})\n`;
-                }
-                messageBilan += `\n`;
-            }
-
-            // On envoie le résultat final
+            // On envoie le résultat final au Boss
             await sock.sendMessage(jid, { text: messageBilan });
 
         } catch (error) {
             console.error('❌ Erreur Commande !bilan:', error);
             await sock.sendMessage(jid, { text: "❌ *Erreur* : Impossible de générer le bilan pour le moment." });
         }
-        return true; // Commande traitée avec succès
+        return true;
     }
-
     // =========================================================
     // 📅 COMMANDE : !semaine (Résumé des 7 derniers jours)
     // =========================================================
