@@ -20,24 +20,34 @@ const SPREADSHEET_ID = '1rkdKHF-x6bP7zcJy3Y34s-t-99g1XZama6J39DTsK6s';
 /**
  * Calcule la cellule exacte (Ex: "Jul!V5" pour le 18 juillet)
  */
+/**
+ * Calcule la cellule exacte (Prend en compte le changement de jour à minuit)
+ */
 function getCelluleDuJour() {
     const date = new Date();
+    const heureActuelle = date.getHours();
     
-    // Noms des onglets tels qu'ils sont en bas de ton image
+    // ⏰ SI APRES MINUIT (entre 00h et 04h59) : On recule d'un jour !
+    if (heureActuelle < 5) {
+        date.setDate(date.getDate() - 1);
+        console.log(`📆 Rapport reçu après minuit. Ajustement de la date à la veille : ${date.toLocaleDateString()}`);
+    }
+    
+    // Noms des onglets
     const moisOnglets = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const nomOnglet = moisOnglets[date.getMonth()];
     
     const jour = date.getDate();
     
-    // Le 1er est en colonne E. On fait la carte des colonnes de 1 à 31.
+    // Le 1er est en colonne E.
     const colonnes = [
         "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", 
         "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI"
     ];
     
-    const lettreColonne = colonnes[jour - 1]; // jour 1 = E, jour 18 = V
+    const lettreColonne = colonnes[jour - 1];
     
-    return `${nomOnglet}!${lettreColonne}5`; // Ligne 5 selon ton image
+    return `${nomOnglet}!${lettreColonne}5`;
 }
 
 /**
