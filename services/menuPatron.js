@@ -6,10 +6,22 @@ const config = require('../config');
  * Gère les commandes secrètes envoyées par le patron en privé
  */
 async function gererCommandesPatron(sock, jid, texteBrut) {
-    // 1. SÉCURITÉ : Vérifie si l'ID contient ton numéro (pour contourner les :xx de WhatsApp)
-    const vientDuPatron = jid.includes(config.monNumero) || jid.includes(config.secondaireNumero);
-    if (!vientDuPatron) return false;
+    // 1. SÉCURITÉ : Extraire l'identifiant brut (Numéro ou LID, sans l'appareil :xx)
+    const idBrut = jid.split('@')[0].split(':')[0];
 
+    const identifiantsAutorises = [
+        String(config.monNumero),
+        String(config.secondaireNumero),
+        String(config.monLid),         // Ton LID
+        String(config.secondaireLid)   // Le LID de Dimercia
+    ];
+
+    // Vérifie si l'identifiant de l'expéditeur fait partie de la liste VIP
+    if (!identifiantsAutorises.includes(idBrut)) {
+        return false; // Pas autorisé : on laisse passer (vers l'IA ou autre)
+    }
+
+    // On force les minuscules (corrige le bug de "!Incidents" vs "!incidents")
     const texteNormalise = texteBrut.trim().toLowerCase();
 
     // =========================================================
@@ -207,6 +219,177 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
             console.error('❌ Erreur !statut:', error);
             await sock.sendMessage(jid, { text: `❌ Erreur : ${error.message}` });
         }
+        return true;
+    }
+
+    // =========================================================
+    // 🚶‍♂️ COMMANDE : !visites (Visites terrain du jour)
+    // =========================================================
+    if (texteNormalise === '!visites') {
+        try {
+            const aujourdhui = new Date();
+            aujourdhui.setHours(0, 0, 0, 0);
+
+            const visites = await prisma.visiteTerrain.findMany({
+                where: { dateVisite: { gte: aujourdhui } },
+                orderBy: { dateVisite: 'desc' }
+            });
+
+            if (visites.length === 0) {
+                await sock.sendMessage(jid, { text: `🚶‍♂️ *VISITES TERRAIN*\n\nAucune visite enregistrée aujourd'hui.` });
+                return true;
+            }
+
+            let msg = `🚶‍♂️ *VISITES DU JOUR* (${visites.length})\n\n`;
+            for (const v of visites) {
+                const icone = v.statut.toLowerCase() === 'ok' ? '✅' : '⚠️';
+                msg += `${icone} *ID ${v.agentId}* (${v.pdv})\n`;
+                msg += `   Tickets: ${v.tickets} | Statut: ${v.statut}\n`;
+                msg += `   ⌚ ${v.heureVisite}\n\n`;
+            }
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !visites:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur lecture DB : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // 🛑 COMMANDE : !penalites (Pénalités du jour)
+    // =========================================================
+    if (texteNormalise === '!penalites') {
+        try {
+            const aujourdhui = new Date();
+            aujourdhui.setHours(0, 0, 0, 0);
+
+            const penalites = await prisma.penalite.findMany({
+                where: { dateSaisie: { gte: aujourdhui } },
+                orderBy: { dateSaisie: 'desc' }
+            });
+
+            if (penalites.length === 0) {
+                await sock.sendMessage(jid, { text: `🛑 *PÉNALITÉS*\n\nAucune pénalité enregistrée aujourd'hui. L'équipe est sage !` });
+                return true;
+            }
+
+            let msg = `🛑 *PÉNALITÉS DU JOUR* (${penalites.length})\n\n`;
+            let totalAmendes = 0;
+
+            for (const p of penalites) {
+                msg += `• *ID ${p.agentId}* : ${p.montant}\n`;
+                msg += `  👉 Motif : _${p.motif}_\n\n`;
+                
+                // Petit calcul optionnel si les montants sont en $ (juste pour l'info)
+                if (p.montant && p.montant.includes('$')) {
+                    totalAmendes += parseInt(p.montant) || 0;
+                }
+            }
+            
+            if (totalAmendes > 0) msg += `\n💵 *Total estimé (en USD) :* ${totalAmendes}$`;
+            
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !penalites:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur lecture DB : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // 👥 COMMANDE : !equipe (Managers actifs aujourd'hui)
+    // =========================================================
+    if (texteNormalise === '!equipe') {
+        try {
+            const aujourdhui = new Date();
+            aujourdhui.setHours(0, 0, 0, 0);
+
+            // On cherche qui a parlé dans le système aujourd'hui
+            const messagesDuJour = await prisma.message.findMany({
+                where: { createdAt: { gte: aujourdhui } },
+                select: { senderJid: true },
+                distinct: ['senderJid']
+            });
+
+            if (messagesDuJour.length === 0) {
+                await sock.sendMessage(jid, { text: `👥 *ÉQUIPE DU JOUR*\n\nAucune activité détectée aujourd'hui.` });
+                return true;
+            }
+
+            const jidsActifs = messagesDuJour.map(m => m.senderJid);
+            const managersActifs = await prisma.manager.findMany({
+                where: { jid: { in: jidsActifs } }
+            });
+
+            let msg = `👥 *MANAGERS ACTIFS AUJOURD'HUI* (${managersActifs.length})\n\n`;
+            for (const m of managersActifs) {
+                msg += `👤 *${m.nom}* (${m.role})\n`;
+            }
+
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !equipe:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur lecture DB : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // ✅ COMMANDE : !clotures (Historique des 15 derniers résolus)
+    // =========================================================
+    if (texteNormalise === '!clotures') {
+        try {
+            const resolus = await prisma.incidentCloture.findMany({
+                where: { statut: 'RESOLU' },
+                orderBy: { dateResolution: 'desc' },
+                take: 15 // Les 15 derniers
+            });
+
+            if (resolus.length === 0) {
+                await sock.sendMessage(jid, { text: `✅ *DERNIÈRES CLÔTURES*\n\nAucun incident n'a été résolu récemment.` });
+                return true;
+            }
+
+            let msg = `✅ *LES 15 DERNIERS INCIDENTS RÉSOLUS*\n\n`;
+            for (const inc of resolus) {
+                const dateRes = new Date(inc.dateResolution).toLocaleDateString('fr-FR');
+                const heureRes = new Date(inc.dateResolution).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                msg += `• *ID ${inc.machineId}* (Anomalie: ${inc.montant} FC)\n`;
+                msg += `  ✅ Réglé le ${dateRes} à ${heureRes}\n\n`;
+            }
+            await sock.sendMessage(jid, { text: msg });
+        } catch (error) {
+            console.error('❌ Erreur !clotures:', error);
+            await sock.sendMessage(jid, { text: `❌ Erreur lecture DB : ${error.message}` });
+        }
+        return true;
+    }
+
+    // =========================================================
+    // 📖 COMMANDE : !menu ou !aide (Liste de toutes les commandes)
+    // =========================================================
+    if (texteNormalise === '!menu' || texteNormalise === '!aide') {
+        let msg = `👑 *PANNEAU DE CONTRÔLE PATRON* 👑\n\n`;
+        msg += `Voici la liste des commandes secrètes que vous pouvez m'envoyer ici :\n\n`;
+        
+        msg += `📊 *RAPPORTS & ACTIVITÉ*\n`;
+        msg += `• *!statut* : Réception des rapports en temps réel\n`;
+        msg += `• *!bilan* : Résumé détaillé de la journée\n`;
+        msg += `• *!semaine* : Résumé des 7 derniers jours\n\n`;
+
+        msg += `🚨 *MACHINES & INCIDENTS*\n`;
+        msg += `• *!incidents* : Liste des machines en anomalie\n`;
+        msg += `• *!clotures* : Les 15 derniers problèmes résolus\n\n`;
+
+        msg += `🕵️ *TERRAIN & ÉQUIPE*\n`;
+        msg += `• *!equipe* : Managers qui travaillent aujourd'hui\n`;
+        msg += `• *!visites* : Détails des visites terrain du jour\n`;
+        msg += `• *!penalites* : Liste des amendes distribuées\n\n`;
+
+        msg += `⚙️ *SYSTÈME*\n`;
+        msg += `• *!reset-jour* : (Danger) Efface les rapports du jour\n`;
+
+        await sock.sendMessage(jid, { text: msg });
         return true;
     }
 
