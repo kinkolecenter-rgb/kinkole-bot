@@ -299,14 +299,14 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
             String(config.monNumero), 
             String(config.secondaireNumero),
             String(config.monLid),         // Ton LID
-            String(config.secondaireLid)   // Le LID de Dimercia (138277243904251)
+            String(config.secondaireLid)   // Le LID de Dimercia
         ];
         
         const estMessagePriveAutorise = !jid.includes('@g.us') && identifiantsAutorises.includes(idBrut);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        // Formule stricte pour attraper 5.660
-        const matchUsd = texteMessage.match(/([\d.,]+)\s*\$/);
+        // ✅ LE NOUVEAU REGEX : Capture les chiffres MÊME avec des espaces (ex: 4 750)
+        const matchUsd = texteMessage.match(/([\d\s.,]+)\s*(?:\$|usd)/i);
 
         if ((estGroupePRTerrain || estMessagePriveAutorise) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
             
@@ -315,8 +315,8 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
             const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
 
             if (estDansCreneau) {
-                // Nettoyage : 5.660 devient 5660
-                const texteNettoye = matchUsd[1].replace(/\./g, '').replace(',', '.');
+                // ✅ Nettoyage magique : Enlève les espaces (\s) et les points de milliers !
+                const texteNettoye = matchUsd[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
                 const montantPropre = parseFloat(texteNettoye);
                 
                 console.log(`💸 Montant USD détecté (par ${nomExpediteur}) : ${montantPropre}$`);
