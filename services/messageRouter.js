@@ -132,8 +132,8 @@ function parserIncidentsFormat(texte) {
     // - Capture l'ID : ([0-9]{5,7})
     // - Accepte comme séparateur : = ou : ou même un simple espace \s*[=: ]\s*
     // - Capture tout le reste de la ligne (montant + FC ou mot "résolu") : (.+)
-    const regexLigne = /^[*\-•.\s]*([0-9]{5,7})\s*[=: ]\s*(.+)$/;
-
+    const regexLigne = /^[*\-•.\s]*(?:id|🆔)?[\s.:\-]*([0-9]{5,7})\s*[=: ]\s*(.+)$/i;
+    
     for (const ligne of lignes) {
         if (/non.{0,10}cl/i.test(ligne) || /les\s+id/i.test(ligne) || /ids?\s+non/i.test(ligne)) continue;
         if (/^[-*•=\s]+$/.test(ligne) || /^[0-9]{1,3}$/.test(ligne) || /^(aucun|ok|tout|bonsoir|bonjour)/i.test(ligne)) continue;
@@ -549,7 +549,10 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
             (texteNormalise.includes('ticket') && !texteNormalise.includes('non cl') && !texteNormalise.includes('cloture'))
         );
 
-        const estNonCloture = !estRapportAutre && (
+        const estNonCloture = !estRapportAutre && 
+            !texteNormalise.includes('déclaré par') && // 🛑 Ignore la propre confirmation du bot
+            !texteNormalise.includes('action requise') && // 🛑 Ignore le message de la Tour de Contrôle
+            (
             // Formulations directes (avec les "é" ajoutés)
             texteNormalise.includes('non cloture') || 
             texteNormalise.includes('non clôture') || 
