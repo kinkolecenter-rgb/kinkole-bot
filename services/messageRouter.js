@@ -290,50 +290,60 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         // ==========================================
         const texteMessage = extraireTexte(msg) || '';
         
-        // 🚨 On extrait l'identifiant brut (Numéro ou LID, sans le :15)
         const idBrut = jid.split('@')[0].split(':')[0]; 
         const nomExpediteur = msg.pushName || idBrut;
         
-        // 🔑 AJOUT CRITIQUE : On vérifie le Numéro ET le LID !
         const identifiantsAutorises = [
             String(config.monNumero), 
             String(config.secondaireNumero),
-            String(config.monLid),         // Ton LID
-            String(config.secondaireLid)   // Le LID de Dimercia
+            String(config.monLid),
+            String(config.secondaireLid)
         ];
         
         const estMessagePriveAutorise = !jid.includes('@g.us') && identifiantsAutorises.includes(idBrut);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        // ✅ LE NOUVEAU REGEX : Capture les chiffres MÊME avec des espaces (ex: 4 750)
-        const matchUsd = texteMessage.match(/([\d\s.,]+)\s*(?:\$|usd)/i);
-
-        if ((estGroupePRTerrain || estMessagePriveAutorise) && matchUsd && texteMessage.toUpperCase().includes('USD')) {
+        if ((estGroupePRTerrain || estMessagePriveAutorise) && texteMessage.toUpperCase().includes('USD')) {
             
-            // 🕒 VÉRIFICATION DU CRÉNEAU HORAIRE (Entre 22h00 et 04h59)
             const heureMessage = new Date().getHours();
             const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
 
             if (estDansCreneau) {
-                // ✅ Nettoyage magique : Enlève les espaces (\s) et les points de milliers !
-                const texteNettoye = matchUsd[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-                const montantPropre = parseFloat(texteNettoye);
+                // ✅ NOUVEAU REGEX : 
+                // 1. Exige de commencer par un chiffre ([\d])
+                // 2. Cherche tous les montants du message (/g) pour ne pas se tromper
+                const regexUSD = /([\d][\d\s.,]*)\s*(?:\$|usd)/gi;
+                let montantPropre = 0;
+                let match;
                 
-                console.log(`💸 Montant USD détecté (par ${nomExpediteur}) : ${montantPropre}$`);
-                
-                // Envoi immédiat vers Google Sheets
-                const sheet = require('./googleSheets');
-                await sheet.enregistrerRecetteUSD(montantPropre);
-                
-                // Te prévenir sur ton numéro principal
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                    text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${nomExpediteur}*).` 
-                });
+                // On boucle sur tous les montants trouvés (ex: "2.290 $" puis "1 $")
+                while ((match = regexUSD.exec(texteMessage)) !== null) {
+                    let chiffreBrut = match[1];
+                    // Nettoyage
+                    let texteNettoye = chiffreBrut.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+                    let valeur = parseFloat(texteNettoye);
+                    
+                    // 🛡️ SÉCURITÉ : On ignore "1$" (le taux) ou les montants absurdes
+                    if (valeur > 1) {
+                        montantPropre = valeur;
+                        break; // On a trouvé la vraie recette, on s'arrête !
+                    }
+                }
 
-                // Si c'est en privé (Dimercia), on lui répond ET on arrête le code
-                if (estMessagePriveAutorise) {
-                    await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès.` });
-                    continue; // 👈 BLOQUE L'IA
+                if (montantPropre > 0) {
+                    console.log(`💸 Montant USD détecté (par ${nomExpediteur}) : ${montantPropre}$`);
+                    
+                    const sheet = require('./googleSheets');
+                    await sheet.enregistrerRecetteUSD(montantPropre);
+                    
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                        text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${nomExpediteur}*).` 
+                    });
+
+                    if (estMessagePriveAutorise) {
+                        await sock.sendMessage(jid, { text: `✅ Bien reçu ! La recette de ${montantPropre}$ a été enregistrée avec succès.` });
+                        return; // Bloque le reste
+                    }
                 }
 
             } else {
@@ -341,10 +351,11 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                 
                 if (estMessagePriveAutorise) {
                     await sock.sendMessage(jid, { text: `❌ Enregistrement refusé. Le rapport USD n'est accepté qu'entre 22h00 et 04h59.\nHeure actuelle : ${heureMessage}h.` });
-                    continue; // 👈 BLOQUE L'IA
+                    return;
                 }
             }
         }
+        
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
             await gererMessageGroupe(sock, msg, jid, memoire);
