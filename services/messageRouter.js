@@ -665,18 +665,36 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
         }
 
         // ─────────────────────────────────────────────────────────
-        // 🔴 CAS A : NON-CLÔTURÉ ENVOYÉ EN ANTICIPATION (avant 23h)
+        // 🔴 CAS A : DÉCLARATION DE NON-CLÔTURÉS (De 22h00 à 04h59)
         // ─────────────────────────────────────────────────────────
-        if (estNonCloture || (!estRapportAutre && heureActuelle >= 22 && contiendIdsSeuls(texteBrut))) {
+        const estTentativeNonCloture = estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut));
+
+        if (estTentativeNonCloture) {
+            
+            // ⏰ VÉRIFICATION DE LA FOURCHETTE HORAIRE STRICTE (Dès 22h00)
+            const estDansFenetreNonCloture = (heureActuelle >= 22 || heureActuelle < 5);
+
+            if (!estDansFenetreNonCloture) {
+                console.log(`⏳ [REFUSÉ] Tentative de non-clôturé par ${expediteur} à ${heureActuelle}h (Hors fourchette).`);
+                
+                await sock.sendMessage(jid, { 
+                    text: `❌ *Signalement refusé.*\n\nLes rapports de machines non-clôturées ne sont acceptés qu'à partir de *22h00*.\n\n(Il est actuellement ${heureActuelle}h, veuillez patienter).` 
+                });
+                return; // 👈 Le bot bloque ici.
+            }
+
             const incidents = parserIncidentsFormat(texteBrut);
 
             if (incidents.length > 0) {
                 // ✅ Format correct → traitement immédiat
                 await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
             } else {
-                // ❌ Format incorrect → on demande la correction et on attend
+                // ❌ Format incorrect → on demande la correction
                 etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
+                
+                // On sauvegarde l'état d'attente
                 await sauvegarderEtatAttente();
+
                 await sock.sendMessage(jid, {
                     text: `⚠️ J'ai bien capté le rapport de non-clôturé, mais le format est incorrect.\n\nJe ne peux pas enregistrer et publier sans les montants.\n\n${MODELE_NON_CLOTURE}`
                 });
