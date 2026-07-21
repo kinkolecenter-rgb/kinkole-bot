@@ -78,15 +78,15 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 // ✅ Fix 11 : max_tokens porté à 1000
 async function appelerIA(systemPrompt, messages, historique = []) {
     const modeles = [
-        'deepseek/deepseek-r1-distill-llama-70b:free',  // 70B — meilleur
-        'google/gemma-3-27b-it:free',                    // 27B
-        'qwen/qwen-2.5-7b-instruct:free',               // bon rapport qualité/dispo
+        'google/gemma-4-31b-it:free',               // 🏆 1er choix : Le champion qu'on vient de tester
+        'openrouter/free',                          // 🔄 2ème choix : Le routeur automatique (trouve le meilleur gratuit dispo)
+        'openai/gpt-oss-20b',                       // 🚀 3ème choix : Très robuste pour le JSON
+        'deepseek/deepseek-r1-distill-llama-70b:free', 
+        'google/gemma-3-27b-it:free',                    
+        'qwen/qwen-2.5-7b-instruct:free',               
         'google/gemma-3-12b-it:free',
         'mistralai/mistral-7b-instruct:free',
         'meta-llama/llama-3.1-8b-instruct:free',
-        'google/gemma-3-4b-it:free',
-        'meta-llama/llama-3.2-3b-instruct:free',
-        'meta-llama/llama-3.2-1b-instruct:free',
         'microsoft/phi-3-mini-128k-instruct:free'
     ];
 
