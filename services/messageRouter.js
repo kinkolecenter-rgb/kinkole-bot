@@ -205,51 +205,93 @@ function extraireIdsResolusSecurise(texte) {
 }
 
 async function traiterIncidentsValides(sock, incidents, expediteur, participantJid) {
-    const idsEnregistres = [];
-    const idSuivisAffiche = [];
+    const idsNouveaux = [];
+    const incidentsNouveauxDetails = [];
+    
+    const idsResolus = [];
+    const idsNonResolus = [];
 
+    // 1. On trie les informations reçues
     for (const inc of incidents) {
         try {
             if (inc.type === 'suivi') {
                 if (inc.montant === 'RESOLU') {
                     await db.marquerIncidentResolu(inc.id);
-                    idSuivisAffiche.push(`✅ ID ${inc.id} marqué RÉSOLU`);
+                    idsResolus.push(inc.id);
                 } else {
-                    idSuivisAffiche.push(`❌ ID ${inc.id} reste NON CLÔTURÉ`);
+                    // Si le manager a écrit "non résolu"
+                    idsNonResolus.push(inc.id);
                 }
             } else {
+                // C'est un NOUVEL incident d'aujourd'hui (avec un montant financier)
                 await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
-                idsEnregistres.push(inc.id);
+                idsNouveaux.push(inc.id);
+                incidentsNouveauxDetails.push(`ID ${inc.id} = ${inc.montant}`);
             }
         } catch (err) {
             console.error('Erreur DB Incident:', err.message);
         }
     }
 
-    if (idSuivisAffiche.length > 0) {
-        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-            text: `📊 *Suivi des non-clôturés par ${expediteur} :*\n\n${idSuivisAffiche.join('\n')}`
+    // =====================================
+    // 🟢 SCÉNARIO 1 : L'INCIDENT EST RÉSOLU
+    // =====================================
+    if (idsResolus.length > 0) {
+        const phraseResolution = idsResolus.length > 1 
+            ? `Les IDs *${idsResolus.join(', ')}* — problème résolu ✅` 
+            : `L'ID *${idsResolus[0]}* — problème résolu ✅`;
+        
+        // 📢 On publie la bonne nouvelle dans le groupe !
+        await sock.sendMessage(GROUPE_DISPARUS, { text: `✅ *MISE À JOUR :*\n${phraseResolution}` });
+        
+        // Notification silencieuse pour toi
+        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+            text: `✅ Suivi : Incident(s) clos en DB : ${idsResolus.join(', ')} (par ${expediteur})` 
         });
-        return idsEnregistres;
     }
 
-    try {
-        await db.prisma.report.create({
-            data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
+    // =====================================
+    // 🔴 SCÉNARIO 2 : LE RELIQUAT N'EST TOUJOURS PAS RÉGLÉ
+    // =====================================
+    if (idsNonResolus.length > 0) {
+        // 🤫 Le bot reste SILENCIEUX dans les groupes.
+        
+        // 📩 Mais il envoie un conseil de management en privé au manager :
+        const msgConseil = `⚠️ *CONSEIL DE SUIVI* ⚠️\n\nCher manager, vous avez signalé que le problème de non-clôturé (reliquat) pour les IDs *${idsNonResolus.join(', ')}* n'est toujours pas réglé.\n\n👉 *Veuillez suivre ce dossier de très près auprès de l'agent concerné afin que la situation soit régularisée le plus vite possible.*\n\nBon courage à vous !`;
+        
+        await sock.sendMessage(participantJid, { text: msgConseil });
+
+        // Notification silencieuse pour toi
+        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+            text: `❌ Suivi : Le non-clôturé persiste pour les IDs : ${idsNonResolus.join(', ')} (déclaré par ${expediteur}). Le bot a rappelé au manager de suivre le dossier.` 
         });
-    } catch (e) {}
+    }
 
-    const phraseIds = idsEnregistres.length > 1 ? `les ids *${idsEnregistres.join(', ')}* n'ont pas clôturé` : `l'id *${idsEnregistres[0]}* n'a pas clôturé`;
-    await sock.sendMessage(GROUPE_DISPARUS, { text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}` });
+    // =====================================
+    // 🟠 SCÉNARIO 3 : NOUVEAUX INCIDENTS DU JOUR
+    // =====================================
+    if (idsNouveaux.length > 0) {
+        try {
+            await db.prisma.report.create({
+                data: { type: 'incident_cloture', contenu: { statut: 'INCIDENT_DECLARE' }, managerJid: participantJid }
+            });
+        } catch (e) {}
 
-    const detail = incidents.map(i => `ID ${i.id} = ${i.montant}`).join('\n');
-    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-        text: `⚠️ *NON CLÔTURÉ* déclaré par *${expediteur}*\n\n${detail}\n\n✅ Enregistré en DB.`
-    });
+        const phraseIds = idsNouveaux.length > 1 
+            ? `les ids *${idsNouveaux.join(', ')}* n'ont pas clôturé` 
+            : `l'id *${idsNouveaux[0]}* n'a pas clôturé`;
+        
+        // 📢 On publie l'alerte du nouveau problème
+        await sock.sendMessage(GROUPE_DISPARUS, { text: `⚠️ *RAPPORT MACHINE NON CLÔTURÉE* ⚠️\n\n${phraseIds}` });
 
-    return idsEnregistres;
+        const detail = incidentsNouveauxDetails.join('\n');
+        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+            text: `⚠️ *NOUVEAU NON CLÔTURÉ* déclaré par *${expediteur}*\n\n${detail}\n\n✅ Enregistré en DB.`
+        });
+    }
+
+    return idsNouveaux;
 }
-
 /**
  * Fonction principale du routeur de messages
  */
