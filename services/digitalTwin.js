@@ -9,7 +9,7 @@
 const config = require('../config');
 const db = require('./database');
 
-const CLE_TWIN       = 'twin:etat_centre_v2';
+const CLE_TWIN       = 'twin:etat_centre_v3';
 const CLE_HISTORIQUE = 'twin:historique'; // snapshots horaires
 const TTL_TWIN       = 60 * 60 * 24;     // 24h
 const TTL_HISTO      = 60 * 60 * 24 * 7; // 7 jours
