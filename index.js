@@ -172,6 +172,53 @@ async function startBot() {
     });
 
     sock.ev.on('messages.upsert', async (payload) => {
+        try {
+            const msg = payload.messages[0];
+            
+            // Si c'est un message système ou envoyé par le bot lui-même, on laisse passer
+            if (!msg || !msg.message || msg.key.fromMe) {
+                return await handleIncomingMessage(sock, payload, memoire, assistant);
+            }
+
+            // 🔍 1. Extraction du texte et de l'expéditeur
+            const texteBrut = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+            const texteMinuscule = texteBrut.toLowerCase().trim();
+            
+            const jid = msg.key.remoteJid;
+            const senderJid = msg.key.participant || msg.key.remoteJid;
+            const idBrut = senderJid.split('@')[0].split(':')[0]; // Ex: "204685424214253"
+
+            // 🛡️ 2. Vérification VIP
+            const estUnBoss = ['204685424214253', '138277243904251', '243904246049', '243897077439'].includes(idBrut);
+
+            // 🛑 3. LE SUPER COUPE-CIRCUIT
+            if (estUnBoss && (texteMinuscule === 'sortie usd' || texteMinuscule === 'sortie dollar' || texteMinuscule === '!sortie usd')) {
+                
+                console.log(`🚨 [FINANCES] Le Boss a signalé une sortie USD. IA bloquée !`);
+                
+                // A. On répond instantanément
+                await sock.sendMessage(jid, { 
+                    text: "✅ *Bien reçu Boss !*\nL'information est enregistrée. Le cumul USD repartira à zéro ce soir lors du rapport du manager." 
+                });
+                
+                // B. On sauvegarde directement dans la base de données (Pour que le fichier Google Sheets le trouve ce soir)
+                await db.prisma.message.create({
+                    data: {
+                        groupeJid: jid,
+                        senderJid: senderJid,
+                        texte: texteBrut,
+                        est_traite: true // Marqué comme traité pour ne pas déranger les autres fonctions
+                    }
+                });
+
+                // C. ⛔ ON STOPPE TOUT ! On bloque l'accès au reste du bot.
+                return; 
+            }
+        } catch (e) {
+            console.error("❌ Erreur dans le super coupe-circuit :", e.message);
+        }
+
+        // 🔄 Si ce n'est pas "sortie usd", on laisse le bot faire sa vie normale (IA, vérification d'heure, etc.)
         await handleIncomingMessage(sock, payload, memoire, assistant);
     });
 
