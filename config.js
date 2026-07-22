@@ -38,7 +38,7 @@ module.exports = {
     managers: {
 
         // 👇 TES DEUX COMPTES AJOUTÉS ICI (Les Boss)
-        '204685424214253@lid': { nom: 'Boss Principal', role: 'Admin' },
+        //'204685424214253@lid': { nom: 'Boss Principal', role: 'Admin' },
         '138277243904251@lid': { nom: 'Boss Secondaire', role: 'Admin' },
         
         '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
