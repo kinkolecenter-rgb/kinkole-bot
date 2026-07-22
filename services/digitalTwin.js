@@ -7,8 +7,9 @@
  */
 
 const config = require('../config');
+const db = require('./database');
 
-const CLE_TWIN       = 'twin:etat_centre5';
+const CLE_TWIN       = 'twin:etat_centre_v4';
 const CLE_HISTORIQUE = 'twin:historique'; // snapshots horaires
 const TTL_TWIN       = 60 * 60 * 24;     // 24h
 const TTL_HISTO      = 60 * 60 * 24 * 7; // 7 jours
@@ -72,14 +73,114 @@ function etatVide() {
 // ─── Module principal ─────────────────────────────────────────────────────────
 module.exports = function creerDigitalTwin(redis) {
 
-    // ── Lecture de l'état actuel ──────────────────────────────────────────────
+    // ── NOUVEAU : Reconstruire l'état depuis Supabase ─────────────────────────
+    const reconstruireEtatDepuisSupabase = async () => {
+        const etat = etatVide();
+        etat.dateJournee = new Date().toLocaleDateString('fr-FR', { timeZone: 'Africa/Kinshasa' });
+        etat.derniereMaj = Date.now();
+
+        try {
+            console.log("🔄 Reconstruction du Twin depuis Supabase via Prisma...");
+            
+            // ⏰ 1. Définir le début de la journée 
+            const debutJournee = new Date();
+            debutJournee.setHours(0, 0, 0, 0);
+
+            // 📊 2. Chercher dans la table "Report" avec le champ "timestamp"
+            const rapportsDuJour = await db.prisma.report.findMany({
+                where: { timestamp: { gte: debutJournee } }
+            });
+
+            const typesPresents = rapportsDuJour.map(r => r.type);
+            if (typesPresents.includes('ouverture')) etat.rapports.ouverture = true;
+            if (typesPresents.includes('fixture')) etat.rapports.fixture = true;
+            if (typesPresents.includes('fermeture')) etat.rapports.fermeture = true;
+            etat.rapports.connexion = typesPresents.filter(t => t === 'details_connexion').length;
+            
+            // 💰 Gestion intelligente des coffres (matin ou soir selon l'heure)
+            const rapportsCoffre = rapportsDuJour.filter(r => r.type === 'coffre');
+            for (const r of rapportsCoffre) {
+                // On récupère l'heure à laquelle le rapport a été envoyé
+                const heure = new Date(r.timestamp).getHours();
+                if (heure < 18) {
+                    etat.rapports.coffre_matin = true;
+                } else {
+                    etat.rapports.coffre_soir = true;
+                }
+            }
+
+            // 🕵️‍♂️ 3. MEGA FALLBACK : On utilise "timestamp" sur la table Message
+            if (!etat.rapports.ouverture || !etat.rapports.fixture) {
+                const messagesDuJour = await db.prisma.message.findMany({
+                    where: { timestamp: { gte: debutJournee } },
+                    select: { texte: true }
+                });
+                
+                for (const msg of messagesDuJour) {
+                    const txt = (msg.texte || '').toLowerCase();
+                    
+                    if (!etat.rapports.ouverture && (txt.includes('ouverture') || txt.includes('équipe matin'))) {
+                        etat.rapports.ouverture = true;
+                    }
+                    if (!etat.rapports.fixture && (txt.includes('fixture') || (txt.includes('achat') && txt.includes('vente')))) {
+                        etat.rapports.fixture = true;
+                    }
+                }
+            }
+
+            // 🚨 4. Récupérer les incidents non résolus
+            const incidents = await db.getIncidentsNonResolus();
+            if (incidents && incidents.length > 0) {
+                etat.incidents.ouverts = incidents.map(inc => ({
+                    id: String(inc.machineId),
+                    type: 'Non Clôturé / Anomalie',
+                    priorite: 3,
+                    description: `ID ${inc.machineId} signalé`,
+                    auteur: 'Système',
+                    // On utilise "dateDeclaration" car c'est le nom dans ton modèle IncidentCloture
+                    heure: inc.dateDeclaration ? new Date(inc.dateDeclaration).toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }) : '',
+                    ts: inc.dateDeclaration ? new Date(inc.dateDeclaration).getTime() : Date.now()
+                }));
+                etat.incidents.total_jour = incidents.length;
+            }
+
+            // 🧮 5. Recalculer la santé globale
+            etat.score_sante = calculerScore(etat);
+            etat.niveau = niveauDepuisScore(etat.score_sante);
+            etat.alertes = _calculerAlertes(etat);
+
+            console.log(`✅ Twin reconstruit : Ouverture=${etat.rapports.ouverture}, Fixture=${etat.rapports.fixture}`);
+
+        } catch (e) {
+            console.error('❌ Erreur lors de la reconstruction depuis Supabase:', e.message);
+        }
+
+        return etat;
+    };
+    // ── Lecture de l'état actuel (CORRIGÉ) ────────────────────────────────────
     const lireEtat = async () => {
         try {
             const raw = await redis.get(CLE_TWIN);
-            if (!raw) return etatVide();
-            return JSON.parse(raw);
+            const aujourdhui = new Date().toLocaleDateString('fr-FR', { timeZone: 'Africa/Kinshasa' });
+
+            if (raw) {
+                const etat = JSON.parse(raw);
+                // Si l'état en cache correspond bien à la date d'aujourd'hui
+                if (etat.dateJournee === aujourdhui) {
+                    return etat;
+                }
+            }
+
+            // Si Redis est vide, expiré, ou qu'on est un autre jour :
+            const etatReconstruit = await reconstruireEtatDepuisSupabase();
+            
+            // On sauvegarde immédiatement la reconstruction dans Redis pour les prochains appels
+            await redis.set(CLE_TWIN, JSON.stringify(etatReconstruit), 'EX', TTL_TWIN);
+            return etatReconstruit;
+
         } catch (e) {
-            return etatVide();
+            console.error("❌ Erreur de lecture Redis, fallback sur Supabase...", e.message);
+            return await reconstruireEtatDepuisSupabase();
         }
     };
 
