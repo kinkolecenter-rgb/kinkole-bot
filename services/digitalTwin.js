@@ -9,7 +9,7 @@
 const config = require('../config');
 const db = require('./database');
 
-const CLE_TWIN       = 'twin:etat_centre_v3';
+const CLE_TWIN       = 'twin:etat_centre_v4';
 const CLE_HISTORIQUE = 'twin:historique'; // snapshots horaires
 const TTL_TWIN       = 60 * 60 * 24;     // 24h
 const TTL_HISTO      = 60 * 60 * 24 * 7; // 7 jours
@@ -96,8 +96,18 @@ module.exports = function creerDigitalTwin(redis) {
             if (typesPresents.includes('fixture')) etat.rapports.fixture = true;
             if (typesPresents.includes('fermeture')) etat.rapports.fermeture = true;
             etat.rapports.connexion = typesPresents.filter(t => t === 'details_connexion').length;
-            if (typesPresents.includes('coffre_matin')) etat.rapports.coffre_matin = true;
-            if (typesPresents.includes('coffre_soir')) etat.rapports.coffre_soir = true;
+            
+            // 💰 Gestion intelligente des coffres (matin ou soir selon l'heure)
+            const rapportsCoffre = rapportsDuJour.filter(r => r.type === 'coffre');
+            for (const r of rapportsCoffre) {
+                // On récupère l'heure à laquelle le rapport a été envoyé
+                const heure = new Date(r.timestamp).getHours();
+                if (heure < 18) {
+                    etat.rapports.coffre_matin = true;
+                } else {
+                    etat.rapports.coffre_soir = true;
+                }
+            }
 
             // 🕵️‍♂️ 3. MEGA FALLBACK : On utilise "timestamp" sur la table Message
             if (!etat.rapports.ouverture || !etat.rapports.fixture) {
