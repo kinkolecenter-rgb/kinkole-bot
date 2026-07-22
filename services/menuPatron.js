@@ -25,6 +25,22 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
     const texteNormalise = texteBrut.trim().toLowerCase();
 
     // =========================================================
+    // 💵 COMMANDE SECRÈTE : Sortie USD (Remise à zéro des dollars)
+    // =========================================================
+    if (texteNormalise === 'sortie usd' || texteNormalise === 'sortie dollar' || texteNormalise === 'sortie dollars') {
+        
+        // 1. On envoie la confirmation immédiate au patron
+        await sock.sendMessage(jid, { 
+            text: "✅ *Bien reçu Boss !*\nL'information est enregistrée dans le système. Ce soir, lors du rapport du manager, le cumul USD repartira automatiquement à zéro." 
+        });
+
+        console.log(`🚨 [FINANCES] Le Boss (${idBrut}) a signalé une sortie USD. La demande est loggée dans la base de données.`);
+
+        // 2. On retourne TRUE pour empêcher le bot d'envoyer ce texte à l'Intelligence Artificielle
+        return true; 
+    }
+
+    // =========================================================
     // 📊 COMMANDE : !bilan (Traçage exact des Collaborateurs VIP)
     // =========================================================
     if (texteNormalise === '!bilan') {
