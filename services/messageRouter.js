@@ -217,6 +217,9 @@ async function traiterIncidentsValides(sock, incidents, expediteur, participantJ
             if (inc.type === 'suivi') {
                 if (inc.montant === 'RESOLU') {
                     await db.marquerIncidentResolu(inc.id);
+                    if (assistant?.notifierResolution) {
+                        await assistant.notifierResolution(inc.id, participantJid, expediteur);
+                    }
                     idsResolus.push(inc.id);
                 } else {
                     // Si le manager a écrit "non résolu"
@@ -225,6 +228,9 @@ async function traiterIncidentsValides(sock, incidents, expediteur, participantJ
             } else {
                 // C'est un NOUVEL incident d'aujourd'hui (avec un montant financier)
                 await db.sauvegarderIncidentCloture(inc.id, inc.montant, participantJid);
+                if (assistant?.notifierIncident) {
+                    await assistant.notifierIncident(inc.id, participantJid, expediteur);
+                }
                 idsNouveaux.push(inc.id);
                 incidentsNouveauxDetails.push(`ID ${inc.id} = ${inc.montant}`);
             }
@@ -377,7 +383,9 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                     
                     const sheet = require('./googleSheets');
                     await sheet.enregistrerRecetteUSD(montantPropre);
-                    
+                    if (assistant?.notifierUSD) {
+                        await assistant.notifierUSD(montantPropre);
+                    }
                     await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
                         text: `📊 *Google Sheets mis à jour !*\n${montantPropre}$ enregistrés dans le tableau USD (ajouté par *${nomExpediteur}*).` 
                     });
@@ -400,7 +408,7 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
         if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
-            await gererMessageGroupe(sock, msg, jid, memoire);
+            await gererMessageGroupe(sock, msg, jid, memoire, assistant);
             continue;
         }
 
@@ -482,7 +490,7 @@ async function lancerRattrapageAutomatique(sock, db) {
 /**
  * Gère la logique des messages reçus dans les groupes
  */
-async function gererMessageGroupe(sock, msg, jid, memoire) {
+async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     const participantJid = msg.key.participant || msg.key.remoteJid || '';
     
     // ==========================================
@@ -870,6 +878,14 @@ async function gererMessageGroupe(sock, msg, jid, memoire) {
 
             try {
                 await db.sauvegarderReport(typeLocal, analyseLocale.donnees || {}, participantJid, true, null);
+                // AJOUTER (assistant est passé depuis handleIncomingMessage)
+                if (assistant?.notifierRapport) {
+                    await assistant.notifierRapport({
+                        expediteurJid: participantJid,
+                        expediteur,
+                        texte: texteBrut
+                    }, typeLocal);
+                }
                 console.log(`✅ Rapport structuré (${typeLocal}) sauvegardé dans la base !`);
                 
                 // 🛑 CORRECTION ANTI-DOUBLONS : On utilise le VRAI ID de la base de données
