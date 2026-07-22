@@ -82,13 +82,13 @@ module.exports = function creerDigitalTwin(redis) {
         try {
             console.log("🔄 Reconstruction du Twin depuis Supabase via Prisma...");
             
-            // ⏰ 1. Définir le début de la journée (Minuit, heure de Kinshasa)
+            // ⏰ 1. Définir le début de la journée 
             const debutJournee = new Date();
             debutJournee.setHours(0, 0, 0, 0);
 
-            // 📊 2. Chercher dans la table "Report" (Méthode officielle)
+            // 📊 2. Chercher dans la table "Report" avec le champ "timestamp"
             const rapportsDuJour = await db.prisma.report.findMany({
-                where: { createdAt: { gte: debutJournee } }
+                where: { timestamp: { gte: debutJournee } }
             });
 
             const typesPresents = rapportsDuJour.map(r => r.type);
@@ -99,7 +99,7 @@ module.exports = function creerDigitalTwin(redis) {
             if (typesPresents.includes('coffre_matin')) etat.rapports.coffre_matin = true;
             if (typesPresents.includes('coffre_soir')) etat.rapports.coffre_soir = true;
 
-            // 🕵️‍♂️ 3. MEGA FALLBACK : Si les rapports sont manquants en DB, on fouille les textes des messages !
+            // 🕵️‍♂️ 3. MEGA FALLBACK : On utilise "timestamp" sur la table Message
             if (!etat.rapports.ouverture || !etat.rapports.fixture) {
                 const messagesDuJour = await db.prisma.message.findMany({
                     where: { timestamp: { gte: debutJournee } },
@@ -108,12 +108,11 @@ module.exports = function creerDigitalTwin(redis) {
                 
                 for (const msg of messagesDuJour) {
                     const txt = (msg.texte || '').toLowerCase();
-                    // On cherche les indices clairs d'une ouverture
-                    if (!etat.rapports.ouverture && (txt.includes('ouverture du') || txt.includes('équipe matin'))) {
+                    
+                    if (!etat.rapports.ouverture && (txt.includes('ouverture') || txt.includes('équipe matin'))) {
                         etat.rapports.ouverture = true;
                     }
-                    // On cherche les indices clairs d'une fixture
-                    if (!etat.rapports.fixture && (txt.includes('fixtures sport betting') || (txt.includes('achat') && txt.includes('vente')))) {
+                    if (!etat.rapports.fixture && (txt.includes('fixture') || (txt.includes('achat') && txt.includes('vente')))) {
                         etat.rapports.fixture = true;
                     }
                 }
@@ -128,8 +127,9 @@ module.exports = function creerDigitalTwin(redis) {
                     priorite: 3,
                     description: `ID ${inc.machineId} signalé`,
                     auteur: 'Système',
-                    heure: inc.createdAt ? new Date(inc.createdAt).toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }) : '',
-                    ts: inc.createdAt ? new Date(inc.createdAt).getTime() : Date.now()
+                    // On utilise "dateDeclaration" car c'est le nom dans ton modèle IncidentCloture
+                    heure: inc.dateDeclaration ? new Date(inc.dateDeclaration).toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }) : '',
+                    ts: inc.dateDeclaration ? new Date(inc.dateDeclaration).getTime() : Date.now()
                 }));
                 etat.incidents.total_jour = incidents.length;
             }
@@ -142,7 +142,7 @@ module.exports = function creerDigitalTwin(redis) {
             console.log(`✅ Twin reconstruit : Ouverture=${etat.rapports.ouverture}, Fixture=${etat.rapports.fixture}`);
 
         } catch (e) {
-            console.error('❌ Erreur Critique lors de la reconstruction depuis Supabase:', e.stack);
+            console.error('❌ Erreur lors de la reconstruction depuis Supabase:', e.message);
         }
 
         return etat;
