@@ -80,50 +80,73 @@ module.exports = function creerDigitalTwin(redis) {
         etat.derniereMaj = Date.now();
 
         try {
-            console.log("🔄 Redis est vide. Reconstruction du Twin depuis Supabase en cours...");
+            console.log("🔄 Reconstruction du Twin depuis Supabase via Prisma...");
             
-            // 1. Récupération des rapports du jour
-            const [ouv, fix, ferm, conn] = await Promise.all([
-                db.getReportsAujourdhui('ouverture'),
-                db.getReportsAujourdhui('fixture'),
-                db.getReportsAujourdhui('fermeture'),
-                db.getReportsAujourdhui('details_connexion')
-            ]);
+            // ⏰ 1. Définir le début de la journée (Minuit, heure de Kinshasa)
+            const debutJournee = new Date();
+            debutJournee.setHours(0, 0, 0, 0);
 
-            if (ouv && ouv.length > 0) etat.rapports.ouverture = true;
-            if (fix && fix.length > 0) etat.rapports.fixture = true;
-            if (ferm && ferm.length > 0) etat.rapports.fermeture = true;
-            if (conn) etat.rapports.connexion = conn.length;
+            // 📊 2. Chercher dans la table "Report" (Méthode officielle)
+            const rapportsDuJour = await db.prisma.report.findMany({
+                where: { createdAt: { gte: debutJournee } }
+            });
 
-            // (Optionnel : ajouter coffre_matin et coffre_soir s'ils existent dans tes types de rapports DB)
+            const typesPresents = rapportsDuJour.map(r => r.type);
+            if (typesPresents.includes('ouverture')) etat.rapports.ouverture = true;
+            if (typesPresents.includes('fixture')) etat.rapports.fixture = true;
+            if (typesPresents.includes('fermeture')) etat.rapports.fermeture = true;
+            etat.rapports.connexion = typesPresents.filter(t => t === 'details_connexion').length;
+            if (typesPresents.includes('coffre_matin')) etat.rapports.coffre_matin = true;
+            if (typesPresents.includes('coffre_soir')) etat.rapports.coffre_soir = true;
 
-            // 2. Récupération des incidents non résolus (Reliquats, pannes, etc.)
-            const incidentsDB = await db.getIncidentsNonResolus();
-            if (incidentsDB && incidentsDB.length > 0) {
-                etat.incidents.ouverts = incidentsDB.map(inc => ({
+            // 🕵️‍♂️ 3. MEGA FALLBACK : Si les rapports sont manquants en DB, on fouille les textes des messages !
+            if (!etat.rapports.ouverture || !etat.rapports.fixture) {
+                const messagesDuJour = await db.prisma.message.findMany({
+                    where: { timestamp: { gte: debutJournee } },
+                    select: { texte: true }
+                });
+                
+                for (const msg of messagesDuJour) {
+                    const txt = (msg.texte || '').toLowerCase();
+                    // On cherche les indices clairs d'une ouverture
+                    if (!etat.rapports.ouverture && (txt.includes('ouverture du') || txt.includes('équipe matin'))) {
+                        etat.rapports.ouverture = true;
+                    }
+                    // On cherche les indices clairs d'une fixture
+                    if (!etat.rapports.fixture && (txt.includes('fixtures sport betting') || (txt.includes('achat') && txt.includes('vente')))) {
+                        etat.rapports.fixture = true;
+                    }
+                }
+            }
+
+            // 🚨 4. Récupérer les incidents non résolus
+            const incidents = await db.getIncidentsNonResolus();
+            if (incidents && incidents.length > 0) {
+                etat.incidents.ouverts = incidents.map(inc => ({
                     id: String(inc.machineId),
                     type: 'Non Clôturé / Anomalie',
                     priorite: 3,
-                    description: `Machine/Agent ID ${inc.machineId}`,
+                    description: `ID ${inc.machineId} signalé`,
                     auteur: 'Système',
                     heure: inc.createdAt ? new Date(inc.createdAt).toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa' }) : '',
                     ts: inc.createdAt ? new Date(inc.createdAt).getTime() : Date.now()
                 }));
-                etat.incidents.total_jour = incidentsDB.length;
+                etat.incidents.total_jour = incidents.length;
             }
 
-            // 3. Recalcul des scores et alertes
+            // 🧮 5. Recalculer la santé globale
             etat.score_sante = calculerScore(etat);
             etat.niveau = niveauDepuisScore(etat.score_sante);
             etat.alertes = _calculerAlertes(etat);
 
+            console.log(`✅ Twin reconstruit : Ouverture=${etat.rapports.ouverture}, Fixture=${etat.rapports.fixture}`);
+
         } catch (e) {
-            console.error('❌ Erreur lors de la reconstruction depuis Supabase:', e.message);
+            console.error('❌ Erreur Critique lors de la reconstruction depuis Supabase:', e.stack);
         }
 
         return etat;
     };
-
     // ── Lecture de l'état actuel (CORRIGÉ) ────────────────────────────────────
     const lireEtat = async () => {
         try {
