@@ -101,7 +101,7 @@ async function appelerIA(systemPrompt, messages, historique = []) {
                 },
                 body: JSON.stringify({
                     model,
-                    max_tokens: 1000,  // ✅ Fix 11
+                    max_tokens: 3000,  // ✅ Fix 11
                     temperature: 0.1,
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -112,8 +112,16 @@ async function appelerIA(systemPrompt, messages, historique = []) {
             });
             const data = await response.json();
             if (!data.error && data.choices?.[0]?.message?.content) {
-                console.log(`✅ IA via ${model}`);
-                return data.choices[0].message.content;
+                console.log(`✅ IA connectée via ${model}`);
+                
+                // 🛡️ On efface les pensées internes de l'IA (<think>...</think>)
+                let reponsePropre = data.choices[0].message.content;
+                reponsePropre = reponsePropre.replace(/<think>[\s\S]*?<\/think>\n*/g, '').trim();
+                
+                // 🪄 FIX WHATSAPP : Convertir les **gras** (Markdown) en *gras* (WhatsApp)
+                reponsePropre = reponsePropre.replace(/\*\*([^*]+)\*\*/g, '*$1*');
+                
+                return reponsePropre;
             }
             console.log(`⚠️ ${model} indispo, essai suivant...`);
         } catch (e) {
