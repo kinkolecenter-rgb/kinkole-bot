@@ -91,7 +91,7 @@ async function startBot() {
     // Nouveau
     const creerContexte = require('./services/contexte');
     const contexteConv = creerContexte(redis);
-    const assistant = creerAssistant(sock, memoire, contexteConv);
+    const assistant = creerAssistant(sock, memoire, contexteConv, redis);
 
     sock.ev.on('creds.update', saveCreds);
 
