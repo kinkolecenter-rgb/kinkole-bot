@@ -41,21 +41,24 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 - Agent absent, ticket problème, pénalité
 - Problème générateur, Mobile Money bloqué
 
-# RÈGLES DE RÉPONSE
-1. Toujours en français
-2. Ne jamais inventer — si info manquante, le dire clairement
-3. ADAPTE le format à la question :
+# RÈGLES DE RÉPONSE (STRICTES)
+1. Toujours en français.
+2. Ne jamais inventer — si info manquante, le dire clairement.
+3. LANGAGE NATUREL UNIQUEMENT : Ne mentionne JAMAIS de termes informatiques ou noms de variables (comme null, undefined, usd_jour, coffre_statut). Si une donnée manque, écris "Non communiqué" ou "En attente".
+4. TEMPORALITÉ LOGIQUE : Prends en compte l'heure actuelle. Ne recommande jamais une action (comme "rappeler l'équipe à 10h") s'il est déjà passé 10h. Concentre-toi sur les actions futures.
+5. SUIVI CONTINU : Si un incident critique ou un ID non clôturé du précédent rapport n'est pas déclaré explicitement comme "résolu", tu DOIS le maintenir dans les "Points d'attention immédiats" avec la mention "Toujours en cours".
+6. ADAPTE le format à la question :
    - Question simple → réponse directe courte
    - Demande de bilan → format structuré avec émojis
    - Demande de chiffres → liste concise
    - Demande d'action → recommandation directe
-4. Maximum 500 mots
-5. Distinguer incident ouvert vs résolu
-6. Utilise l'historique de conversation pour répondre avec cohérence
-7. Heure locale : Africa/Kinshasa (UTC+1)
-8. Quand le Digital Twin est fourni, utilise ses données en PRIORITÉ
+7. Maximum 500 mots.
+8. Distinguer incident ouvert vs résolu.
+9. Utilise l'historique de conversation pour répondre avec cohérence.
+10. Quand le Digital Twin est fourni, utilise ses données en PRIORITÉ.
 
 # FORMAT BILAN (uniquement pour les briefs et bilans)
+🔥 APPROBATION FINANCIÈRE REQUISE (À ajouter TOUT EN HAUT uniquement si une sortie de fonds ou d'argent est demandée)
 🟢/🟡/🔴 [État général en une phrase]
 🔴 POINTS D'ATTENTION IMMÉDIATS
 👥 MANAGERS
@@ -78,6 +81,8 @@ const MODELES = [
 ];
 
 async function appelerIA(systemPrompt, messages, historique = []) {
+   const heureKinshasa = new Date().toLocaleTimeString('fr-FR', { timeZone: 'Africa/Kinshasa', hour: '2-digit', minute: '2-digit' });
+    const systemPromptAvecHeure = `${systemPrompt}\n\n[INFO SYSTÈME INVISIBLE] Heure actuelle à Kinshasa : ${heureKinshasa}`;
     for (const model of MODELES) {
         try {
             const response = await fetch(OPENROUTER_URL, {
@@ -92,7 +97,7 @@ async function appelerIA(systemPrompt, messages, historique = []) {
                     max_tokens: 3000,
                     temperature: 0.1,
                     messages: [
-                        { role: 'system', content: systemPrompt },
+                        { role: 'system', content: systemPromptAvecHeure },
                         ...historique,
                         ...messages
                     ]
