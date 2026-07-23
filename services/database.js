@@ -224,6 +224,22 @@ async function sauvegarderPenalite(participantJid, texteBrut) {
     }
 }
 
+// =================================================================
+// 🏆 STATISTIQUES : TOP VISITES VIA VUE SQL
+// =================================================================
+async function getTopVisites() {
+    try {
+        const top = await prisma.top_agents_visites.findMany({
+            orderBy: { total_visites: 'desc' },
+            take: 5 // On prend le Top 5
+        });
+        return top;
+    } catch (e) {
+        console.error("⚠️ Erreur lecture de la vue top_agents_visites :", e.message);
+        return [];
+    }
+}
+
 async function disconnect() {
     await prisma.$disconnect();
 }
@@ -237,6 +253,7 @@ module.exports = {
     getMessagesNonTraites,
     marquerMessageTraite,
     disconnect,
+    getTopVisites,
     getReportsAujourdhui,
     sauvegarderIncidentCloture,
     getIncidentsNonResolus,
