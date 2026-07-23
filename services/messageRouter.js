@@ -205,7 +205,7 @@ function extraireIdsResolusSecurise(texte) {
     return [...new Set(ids)]; // Enlève les doublons
 }
 
-async function traiterIncidentsValides(sock, incidents, expediteur, participantJid) {
+async function traiterIncidentsValides(sock, incidents, expediteur, participantJid, assistant) {
     const idsNouveaux = [];
     const incidentsNouveauxDetails = [];
     
@@ -730,7 +730,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                         const incidents = parserIncidentsFormat(texteBrut);
                         if (incidents.length > 0) {
                             etatAttente.delete(jid);
-                            await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                            await traiterIncidentsValides(sock, incidents, expediteur, participantJid, assistant);
                         } else {
                             etatAttente.set(jid, { etape: 'ATTENTE_DECLARATION', timestamp: Date.now() });
                             if (typeof sauvegarderEtatAttente === 'function') await sauvegarderEtatAttente();
@@ -755,7 +755,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
 
                     if (incidents.length > 0) {
                         etatAttente.delete(jid);
-                        await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                        await traiterIncidentsValides(sock, incidents, expediteur, participantJid, assistant);
                     } else {
                         const estErreurSoir = (attente.etape === 'ATTENTE_DECLARATION' || heureActuelle >= 22);
                         
@@ -828,7 +828,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             const incidents = parserIncidentsFormat(texteBrut);
 
             if (incidents.length > 0) {
-                await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                await traiterIncidentsValides(sock, incidents, expediteur, participantJid, assistant);
             } else {
                 etatAttente.set(jid, { etape: 'ATTENTE_DECLARATION', timestamp: Date.now() });
                 if (typeof sauvegarderEtatAttente === 'function') await sauvegarderEtatAttente();
