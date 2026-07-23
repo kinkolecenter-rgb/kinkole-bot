@@ -48,6 +48,7 @@ const NOMS_GROUPES = {
 // =================================================================
 // Structure : { [groupeJid]: { etape: 'ATTENTE_REPONSE_23H' | 'ATTENTE_FORMAT', managerJid, timestamp } }
 const etatAttente = new Map();
+const cooldownRelance = new Map();
 const EXPIRATION_ATTENTE_MS = 2 * 60 * 60 * 1000; // 2 heures
 const CLE_REDIS_ATTENTE = 'etat_attente_synchro';
 
@@ -591,6 +592,54 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     // 🗼 INTERCEPTEUR GLOBAL DE CLÔTURE — UNIQUEMENT DANS SYNCHRO
     // =================================================================
     if (estDansSynchro) {
+
+        // =================================================================
+        // 🚨 LE HARCELEUR CIBLÉ : Rappel immédiat avec modèle strict
+        // =================================================================
+        if (estManagerAutorise) {
+            try {
+                const incidents = await db.getIncidentsNonResolus();
+                
+                // S'il y a des incidents en cours...
+                if (incidents && incidents.length > 0) {
+                    
+                    // On vérifie s'il est déjà en train de donner une bonne réponse
+                    const tenteDeRepondre = texteNormalise.includes('résolu') || 
+                                            texteNormalise.includes('resolu') || 
+                                            texteNormalise.includes('non résolu') ||
+                                            texteNormalise.includes('non resolu');
+                                            
+                    if (!tenteDeRepondre) {
+                        
+                        const maintenant = Date.now();
+                        const dernierRappel = cooldownRelance.get(participantJid) || 0;
+                        
+                        // Anti-spam de 15 minutes
+                        if (maintenant - dernierRappel > 15 * 60 * 1000) {
+                            
+                            const idsNonResolus = [...new Set(incidents.map(i => i.machineId))].join(', ');
+                            const exempleId = incidents[0].machineId; // On prend le premier ID pour l'exemple
+                            
+                            const msgRappel = `⚠️ @${participantJid.split('@')[0]}, désolé de vous interrompre.\n\n` +
+                                              `Il y a des machines avec un reliquat (non clôturées) en attente : *${idsNonResolus}*.\n` +
+                                              `Si vous n'avez pas encore fait le suivi, merci de répondre exactement avec ce modèle :\n\n` +
+                                              `👉 Si le reliquat est réglé : *${exempleId} résolu*\n` +
+                                              `👉 Si le reliquat persiste : *${exempleId} non résolu*`;
+                            
+                            await sock.sendMessage(jid, {
+                                text: msgRappel,
+                                mentions: [participantJid]
+                            });
+                            
+                            // On enregistre l'heure de l'interruption
+                            cooldownRelance.set(participantJid, maintenant);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Erreur lors de la vérification du harceleur :", err.message);
+            }
+        }
 
         // ⛔ Rapports légitimes qui contiennent des IDs+montants mais ne sont PAS des non-clôturés
         const estRapportAutre = (
