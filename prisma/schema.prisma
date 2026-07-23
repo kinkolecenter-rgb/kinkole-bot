@@ -117,3 +117,19 @@ view top_agents_visites {
   jid           String  @unique
   total_visites Int
 }
+
+view top_ventes_tickets {
+  nom_manager   String?
+  jid           String  @unique
+  total_tickets Int
+}
+
+view alertes_terrain {
+  id            Int      @unique
+  nom_manager   String?
+  agentId       String
+  pdv           String
+  statut        String
+  heureVisite   String
+  dateVisite    DateTime
+}
