@@ -119,8 +119,8 @@ view top_agents_visites {
 }
 
 view top_ventes_tickets {
-  nom_manager   String?
-  jid           String  @unique
+  pos_id        String  @unique
+  nom_pdv       String?
   total_tickets Int
 }
 
