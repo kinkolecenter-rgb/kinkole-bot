@@ -703,110 +703,80 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         // ─────────────────────────────────────────────────────────
         const attente = etatAttente.get(jid);
         if (attente) {
+            
+            // 🛡️ SÉCURITÉ ANTI-BLOCAGE : On filtre les messages normaux
+            const ressembleAReponse = /[0-9]{5,7}/.test(texteNormalise) || 
+                                      texteNormalise.includes('cloture') || 
+                                      texteNormalise.includes('clôture') || 
+                                      texteNormalise.includes('resolu') || 
+                                      texteNormalise.includes('résolu') || 
+                                      texteNormalise.includes('ok');
 
-            // ÉTAPE A : On attendait "oui/non/IDs" après la question de 23h
-            if (attente.etape === 'ATTENTE_REPONSE_23H') {
+            if (ressembleAReponse) {
+                // ÉTAPE A : On attendait "oui/non/IDs" après la question de 23h
+                if (attente.etape === 'ATTENTE_REPONSE_23H') {
+                    if (estBilanOk) {
+                        try {
+                            await db.prisma.report.create({
+                                data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
+                            });
+                        } catch (e) {}
+                        etatAttente.delete(jid);
+                        await sock.sendMessage(jid, { text: `✅ Parfait, merci *${expediteur}*. Bonne fin de journée à toute l'équipe !` });
+                        return;
+                    }
 
-                if (estBilanOk) {
-                    // ✅ Tout est ok → on ferme la journée
-                    try {
-                        await db.prisma.report.create({
-                            data: { type: 'incident_cloture', contenu: { statut: 'TOUT_EST_OK' }, managerJid: participantJid }
-                        });
-                    } catch (e) {}
-                    etatAttente.delete(jid);
-                    await sock.sendMessage(jid, { text: `✅ Parfait, merci *${expediteur}*. Bonne fin de journée à toute l'équipe !` });
+                    if (estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut))) {
+                        const incidents = parserIncidentsFormat(texteBrut);
+                        if (incidents.length > 0) {
+                            etatAttente.delete(jid);
+                            await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+                        } else {
+                            etatAttente.set(jid, { etape: 'ATTENTE_DECLARATION', timestamp: Date.now() });
+                            if (typeof sauvegarderEtatAttente === 'function') await sauvegarderEtatAttente();
+                            await sock.sendMessage(jid, {
+                                text: `⚠️ @${participantJid.split('@')[0]}, le format est incorrect.\nIl manque les montants.\n\n📝 *Modèle attendu (23h) :*\nNon clôturé\n421596 = 150000`,
+                                mentions: [participantJid]
+                            });
+                        }
+                        return;
+                    }
+
+                    await sock.sendMessage(jid, {
+                        text: `❓ @${participantJid.split('@')[0]}, réponse non reconnue.\n• Dites *"Tout est ok"*\n• Ou envoyez la liste avec les montants (ex: 421596 = 150000)`,
+                        mentions: [participantJid]
+                    });
                     return;
                 }
 
-                if (estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut))) {
-                    // Le manager signale des non-clôturés → vérifier le format
+                // ÉTAPE B : Attente de correction (Matin/Journée = Résolution | Soir = Déclaration)
+                if (attente.etape === 'ATTENTE_FORMAT' || attente.etape === 'ATTENTE_DECLARATION') {
                     const incidents = parserIncidentsFormat(texteBrut);
 
                     if (incidents.length > 0) {
-                        // ✅ Format correct
                         etatAttente.delete(jid);
                         await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
                     } else {
-                        // ❌ Format incorrect → demander la correction
-                        etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
-                        await sauvegarderEtatAttente();
+                        const estErreurSoir = (attente.etape === 'ATTENTE_DECLARATION' || heureActuelle >= 22);
+                        
+                        const msgErreur = estErreurSoir 
+                            ? `⚠️ @${participantJid.split('@')[0]}, format incorrect.\nVous devez mettre un signe "=" et le montant.\n\n📝 *Exemple attendu :*\nNon clôturé\n421596 = 150000`
+                            : `⚠️ @${participantJid.split('@')[0]}, format incorrect.\nVous devez ajouter le mot *"résolu"* après l'ID pour le clôturer.\n\n📝 *Exemple attendu :*\n369439 résolu`;
+
                         await sock.sendMessage(jid, {
-                            text: `⚠️ Format incorrect. Je ne peux pas enregistrer sans les montants.\n\n${MODELE_NON_CLOTURE}`
+                            text: msgErreur,
+                            mentions: [participantJid]
                         });
                     }
                     return;
                 }
-
-                // Réponse non reconnue
-                await sock.sendMessage(jid, {
-                    text: `❓ Je n'ai pas compris. Répondez :\n• *"Tout est ok"* si tout le monde a clôturé\n• Ou envoyez la liste des IDs non clôturés avec le modèle ci-dessous\n\n${MODELE_NON_CLOTURE}`
-                });
-                return;
-            }
-
-            // ÉTAPE B : On attendait la correction du format
-            if (attente.etape === 'ATTENTE_FORMAT') {
-                const incidents = parserIncidentsFormat(texteBrut);
-
-                if (incidents.length > 0) {
-                    // ✅ Format corrigé
-                    etatAttente.delete(jid);
-                    await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
-                } else {
-                    // ❌ Toujours incorrect
-                    await sock.sendMessage(jid, {
-                        text: `⚠️ Format encore incorrect. Merci de respecter exactement le modèle :\n\n${MODELE_NON_CLOTURE}`
-                    });
-                }
-                return;
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 🔴 CAS A : DÉCLARATION DE NON-CLÔTURÉS (De 22h00 à 04h59)
-        // ─────────────────────────────────────────────────────────
-        const estTentativeNonCloture = estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut));
-
-        if (estTentativeNonCloture) {
-            
-            // ⏰ VÉRIFICATION DE LA FOURCHETTE HORAIRE STRICTE (Dès 22h00)
-            const estDansFenetreNonCloture = (heureActuelle >= 22 || heureActuelle < 5);
-
-            if (!estDansFenetreNonCloture) {
-                console.log(`⏳ [REFUSÉ] Tentative de non-clôturé par ${expediteur} à ${heureActuelle}h (Hors fourchette).`);
-                
-                await sock.sendMessage(jid, { 
-                    text: `❌ *Signalement refusé.*\n\nLes rapports de machines non-clôturées ne sont acceptés qu'à partir de *22h00*.\n\n(Il est actuellement ${heureActuelle}h, veuillez patienter).` 
-                });
-                return; // 👈 Le bot bloque ici.
-            }
-
-            const incidents = parserIncidentsFormat(texteBrut);
-
-            if (incidents.length > 0) {
-                // ✅ Format correct → traitement immédiat
-                await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
-            } else {
-                // ❌ Format incorrect → on demande la correction
-                etatAttente.set(jid, { etape: 'ATTENTE_FORMAT', timestamp: Date.now() });
-                
-                // On sauvegarde l'état d'attente
-                await sauvegarderEtatAttente();
-
-                await sock.sendMessage(jid, {
-                    text: `⚠️ J'ai bien capté le rapport de non-clôturé, mais le format est incorrect.\n\nJe ne peux pas enregistrer et publier sans les montants.\n\n${MODELE_NON_CLOTURE}`
-                });
-            }
-            return;
-        }
-
-        // ─────────────────────────────────────────────────────────
-        // 🟢 CAS B : RÉSOLUTION D'UN INCIDENT
+        // 🟢 CAS 1 : RÉSOLUTION D'UN RELIQUAT (Priorité absolue)
         // ─────────────────────────────────────────────────────────
         if (estResolution) {
-            
-            // 🚨 Utilise la nouvelle fonction sécurisée !
             const idsResolus = extraireIdsResolusSecurise(texteBrut);
             
             if (idsResolus && idsResolus.length > 0) {
@@ -815,17 +785,64 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                 }
                 
                 const phraseResolution = idsResolus.length > 1 
-                    ? `les ids ${idsResolus.join(', ')} — problème résolu ✅` 
-                    : `l'id ${idsResolus[0]} — problème résolu ✅`;
+                    ? `les ids ${idsResolus.join(', ')} — reliquat réglé ✅` 
+                    : `l'id ${idsResolus[0]} — reliquat réglé ✅`;
 
                 await sock.sendMessage(GROUPE_DISPARUS, { text: `✅ Mise à jour : ${phraseResolution}` });
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Incident(s) clos en DB : ${idsResolus.join(', ')}` });
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: `✅ Reliquat clos en DB : ${idsResolus.join(', ')}` });
+                return; // 👈 Stoppe la lecture ici ! Le bot ignore le reste du texte collé.
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // 🟠 CAS 2 : LE RELIQUAT PERSISTE (Réponse au harceleur)
+        // ─────────────────────────────────────────────────────────
+        if (texteNormalise.includes('non resolu') || texteNormalise.includes('non résolu')) {
+            const idDetecte = texteNormalise.match(/[0-9]{5,7}/);
+            
+            if (idDetecte) {
+                await sock.sendMessage(jid, { 
+                    text: `⚠️ C'est noté pour l'ID ${idDetecte[0]}. Le reliquat persiste.\n👉 Merci de continuer le suivi avec l'agent.` 
+                });
                 return;
             }
         }
 
         // ─────────────────────────────────────────────────────────
-        // 🔵 CAS C : TOUT EST OK (sans état d'attente actif)
+        // 🔴 CAS 3 : DÉCLARATION D'UN NOUVEAU RELIQUAT (De 22h00 à 04h59)
+        // ─────────────────────────────────────────────────────────
+        const estTentativeNonCloture = estNonCloture || (!estRapportAutre && contiendIdsSeuls(texteBrut));
+
+        if (estTentativeNonCloture) {
+            const estDansFenetreNonCloture = (heureActuelle >= 22 || heureActuelle < 5);
+
+            if (!estDansFenetreNonCloture) {
+                console.log(`⏳ [REFUSÉ] Tentative de non-clôturé par ${expediteur} à ${heureActuelle}h (Hors fourchette).`);
+                
+                await sock.sendMessage(jid, { 
+                    text: `❌ *Signalement refusé.*\n\nLes déclarations de nouveaux reliquats ne sont acceptées qu'à partir de *22h00*.\n\n(Il est actuellement ${heureActuelle}h, veuillez patienter).` 
+                });
+                return;
+            }
+
+            const incidents = parserIncidentsFormat(texteBrut);
+
+            if (incidents.length > 0) {
+                await traiterIncidentsValides(sock, incidents, expediteur, participantJid);
+            } else {
+                etatAttente.set(jid, { etape: 'ATTENTE_DECLARATION', timestamp: Date.now() });
+                if (typeof sauvegarderEtatAttente === 'function') await sauvegarderEtatAttente();
+
+                await sock.sendMessage(jid, {
+                    text: `⚠️ @${participantJid.split('@')[0]}, j'ai bien capté le rapport, mais il manque les montants.\n\n📝 *Modèle attendu :*\nNon clôturé\n421596 = 150000`,
+                    mentions: [participantJid]
+                });
+            }
+            return;
+        }
+
+        // ─────────────────────────────────────────────────────────
+        // 🔵 CAS 4 : TOUT EST OK
         // ─────────────────────────────────────────────────────────
         if (estBilanOk) {
             try {
@@ -837,7 +854,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             return;
         }
     }
-
 
     // =================================================================
     // 🕵️‍♂️ INTERCEPTEUR TERRAIN ET PÉNALITÉS (WORKFLOWS SPÉCIFIQUES)
