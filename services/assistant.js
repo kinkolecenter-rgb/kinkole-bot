@@ -173,7 +173,7 @@ module.exports = function creerAssistant(sock, memoire, contexte, redis) {
                 `📋 *Commandes rapides :*\n` +
                 `• *centre* → état Digital Twin\n` +
                 `• *incidents* → urgences actives\n` +
-                `• *managers* → performance équipe\n` +
+                `• *managers* →  équipe\n` +
                 `• *anomalies* → détection fraude\n` +
                 `• *reset* → effacer historique`,
                 jid
@@ -231,6 +231,37 @@ module.exports = function creerAssistant(sock, memoire, contexte, redis) {
             await send(reponse, jid);
             return true;
         }
+
+        // =================================================================
+        // 🏆 SHORTCUT : TOP VISITES (Moteur Local + IA)
+        // =================================================================
+        const texteMin = texte.toLowerCase();
+        if (texteMin.includes('visite') && (texteMin.includes('top') || texteMin.includes('meilleur') || texteMin.includes('classement'))) {
+            
+            await send('🏆 Récupération du classement instantané...', jid);
+            
+            // 1. Le Moteur Local interroge la Vue SQL instantanément
+            const topAgents = await db.getTopVisites();
+            
+            if (topAgents && topAgents.length > 0) {
+                // 2. On prépare les données brutes pour l'IA
+                const donneesBrutes = topAgents.map((a, i) => `${i + 1}. ${a.nom_manager || 'Inconnu'} : ${a.total_visites} visites`).join('\n');
+                
+                // 3. On utilise l'IA (agentRecherche fait très bien l'affaire) juste pour habiller le texte !
+                const consigne = `Le Boss veut le top des visites. Voici les chiffres exacts de la Base de Données :\n\n${donneesBrutes}\n\nRédige une réponse courte, enthousiaste et très naturelle. Utilise des émojis (🥇🥈🥉 pour le podium). Ne mentionne JAMAIS que tu as lu une base de données.`;
+                
+                const historique = await contexte.getHistorique(jid);
+                const reponseNaturelle = await agentRecherche(consigne, [], historique);
+                
+                await contexte.ajouterEchange(jid, 'user', texte);
+                await contexte.ajouterEchange(jid, 'assistant', reponseNaturelle);
+                await send(reponseNaturelle, jid);
+            } else {
+                await send("🕵️‍♂️ Boss, je n'ai trouvé aucune visite enregistrée pour le moment.", jid);
+            }
+            return true; // 👈 Le bot s'arrête ici, on a court-circuité l'analyse lourde !
+        }
+        // =================================================================
 
         // Coffre
         if (texte.toLowerCase().includes('coffre ok') || texte.toLowerCase().includes('coffre hormis')) {
