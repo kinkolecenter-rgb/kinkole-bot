@@ -110,3 +110,9 @@ model Penalite {
   managerJid  String
   manager     Manager  @relation(fields: [managerJid], references: [jid])
 }
+
+view top_agents_visites {
+  nom_manager   String?
+  jid           String  @unique
+  total_visites Int
+}
