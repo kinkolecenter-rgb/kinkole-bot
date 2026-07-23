@@ -270,8 +270,10 @@ module.exports = function creerAssistant(sock, memoire, contexte, redis) {
             const topTickets = await db.getTopTickets();
             
             if (topTickets && topTickets.length > 0) {
-                const donneesBrutes = topTickets.map((a, i) => `${i + 1}. ${a.nom_manager || 'Inconnu'} : ${a.total_tickets} tickets`).join('\n');
-                const consigne = `Le Boss veut le top des ventes de tickets. Chiffres exacts :\n\n${donneesBrutes}\n\nRédige une réponse courte, motivante avec des émojis. Parle comme un humain sans mentionner la base de données.`;
+                // 👇 C'est cette ligne qui change
+                const donneesBrutes = topTickets.map((a, i) => `${i + 1}. Machine ID ${a.pos_id} (${a.nom_pdv || 'Inconnu'}) : ${a.total_tickets} tickets`).join('\n');
+                
+                const consigne = `Le Boss veut le top des ventes de tickets. Voici les vrais chiffres par machine (POS) :\n\n${donneesBrutes}\n\nRédige une réponse courte, motivante avec des émojis. Parle comme un humain sans mentionner la base de données.`;
                 const historique = await contexte.getHistorique(jid);
                 const reponseNaturelle = await agentRecherche(consigne, [], historique);
                 
