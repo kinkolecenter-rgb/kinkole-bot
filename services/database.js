@@ -240,6 +240,35 @@ async function getTopVisites() {
     }
 }
 
+// =================================================================
+// 🎫 STATISTIQUES : TOP VENTES TICKETS VIA VUE SQL
+// =================================================================
+async function getTopTickets() {
+    try {
+        return await prisma.top_ventes_tickets.findMany({
+            orderBy: { total_tickets: 'desc' },
+            take: 5
+        });
+    } catch (e) {
+        console.error("⚠️ Erreur lecture vue top_ventes_tickets :", e.message);
+        return [];
+    }
+}
+
+// =================================================================
+// 🚨 STATISTIQUES : ALERTES TERRAIN VIA VUE SQL
+// =================================================================
+async function getAlertesTerrain() {
+    try {
+        return await prisma.alertes_terrain.findMany({
+            take: 10 // On prend les 10 dernières alertes
+        });
+    } catch (e) {
+        console.error("⚠️ Erreur lecture vue alertes_terrain :", e.message);
+        return [];
+    }
+}
+
 async function disconnect() {
     await prisma.$disconnect();
 }
@@ -254,6 +283,8 @@ module.exports = {
     marquerMessageTraite,
     disconnect,
     getTopVisites,
+    getTopTickets,
+    getAlertesTerrain,
     getReportsAujourdhui,
     sauvegarderIncidentCloture,
     getIncidentsNonResolus,
