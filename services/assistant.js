@@ -261,7 +261,53 @@ module.exports = function creerAssistant(sock, memoire, contexte, redis) {
             }
             return true; // 👈 Le bot s'arrête ici, on a court-circuité l'analyse lourde !
         }
+
         // =================================================================
+        // 🎫 SHORTCUT : TOP TICKETS
+        // =================================================================
+        if (texteMin.includes('ticket') && (texteMin.includes('top') || texteMin.includes('meilleur') || texteMin.includes('vente'))) {
+            await send('🎫 Calcul des ventes de tickets en cours...', jid);
+            const topTickets = await db.getTopTickets();
+            
+            if (topTickets && topTickets.length > 0) {
+                const donneesBrutes = topTickets.map((a, i) => `${i + 1}. ${a.nom_manager || 'Inconnu'} : ${a.total_tickets} tickets`).join('\n');
+                const consigne = `Le Boss veut le top des ventes de tickets. Chiffres exacts :\n\n${donneesBrutes}\n\nRédige une réponse courte, motivante avec des émojis. Parle comme un humain sans mentionner la base de données.`;
+                const historique = await contexte.getHistorique(jid);
+                const reponseNaturelle = await agentRecherche(consigne, [], historique);
+                
+                await send(reponseNaturelle, jid);
+            } else {
+                await send("🕵️‍♂️ Boss, aucun ticket vendu enregistré pour le moment.", jid);
+            }
+            return true;
+        }
+
+        // =================================================================
+        // 🚨 SHORTCUT : PANNES ET PROBLÈMES TERRAIN
+        // =================================================================
+        if (texteMin.includes('panne') || texteMin.includes('problème') || texteMin.includes('probleme') || texteMin.includes('alerte')) {
+            await send('🚨 Vérification du terrain en cours...', jid);
+            const alertes = await db.getAlertesTerrain();
+            
+            if (alertes && alertes.length > 0) {
+                const donneesBrutes = alertes.map(a => `• PDV: ${a.pdv} (Agent ${a.agentId}) | Statut: ${a.statut} | Signalé par: ${a.nom_manager || 'Inconnu'} à ${a.heureVisite}`).join('\n');
+                const consigne = `Le Boss demande le point sur les pannes et dysfonctionnements du terrain. Voici les alertes en base :\n\n${donneesBrutes}\n\nFais un résumé professionnel, clair et axé sur l'action avec des émojis d'alerte. Ne mentionne pas la base de données.`;
+                const historique = await contexte.getHistorique(jid);
+                const reponseNaturelle = await agentRecherche(consigne, [], historique);
+                
+                await send(reponseNaturelle, jid);
+            } else {
+                await send("✅ Boss, bonne nouvelle : aucun dysfonctionnement signalé sur le terrain !", jid);
+            }
+            return true;
+        }
+
+
+
+        
+        // =================================================================
+
+        
 
         // Coffre
         if (texte.toLowerCase().includes('coffre ok') || texte.toLowerCase().includes('coffre hormis')) {
