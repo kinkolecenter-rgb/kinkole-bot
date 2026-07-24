@@ -352,7 +352,11 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         const estMessagePriveAutorise = !jid.includes('@g.us') && identifiantsAutorises.includes(idBrut);
         const estGroupePRTerrain = (jid === '120363040045715280@g.us');
 
-        if ((estGroupePRTerrain || estMessagePriveAutorise) && texteMessage.toUpperCase().includes('USD')) {
+        const contientAlerteUSD = texteMessage.toUpperCase().includes('USD') || 
+                                  texteMessage.includes('$') || 
+                                  texteMessage.toLowerCase().includes('dollars');
+
+        if ((estGroupePRTerrain || estMessagePriveAutorise) && contientAlerteUSD) {
             
             const heureMessage = new Date().getHours();
             const estDansCreneau = (heureMessage >= 22 || heureMessage < 5);
