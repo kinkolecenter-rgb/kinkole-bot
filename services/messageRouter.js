@@ -148,7 +148,7 @@ function parserIncidentsFormat(texte) {
             if (valeurBrute.includes('non') || valeurBrute.includes('persiste')) {
                 incidents.push({ id: idMachine, montant: 'NON_RESOLU', type: 'suivi' });
             } 
-            else if (valeurBrute.includes('resolu') || valeurBrute.includes('réglé') || valeurBrute.includes('regle')) {
+            else if (valeurBrute.includes('resolu') || valeurBrute.includes('résolu') || valeurBrute.includes('réglé') || valeurBrute.includes('regle')) {
                 incidents.push({ id: idMachine, montant: 'RESOLU', type: 'suivi' });
             } 
             // 🌙 2. CAS DU SOIR (Rapport financier : "372.700fc")
@@ -647,13 +647,13 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                                             `👉 Ou *${exempleId} non résolu*`;
                             }
                             
+                            // 🔒 FIX : On enregistre l'heure AVANT d'envoyer le message pour bloquer les tirs groupés
+                            cooldownRelance.set(participantJid, maintenant);
+                            
                             await sock.sendMessage(jid, {
                                 text: msgRappel,
                                 mentions: [participantJid]
                             });
-                            
-                            // On enregistre l'heure de l'interruption
-                            cooldownRelance.set(participantJid, maintenant);
                         }
                     }
                 }
