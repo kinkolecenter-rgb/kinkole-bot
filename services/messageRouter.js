@@ -594,37 +594,58 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     if (estDansSynchro) {
 
         // =================================================================
-        // 🚨 LE HARCELEUR CIBLÉ : Rappel immédiat avec modèle strict
+        // 🚨 LE HARCELEUR INTELLIGENT : Relance polie à 10h, harcèlement à 12h
         // =================================================================
-        if (estManagerAutorise) {
+        
+        // On vérifie que le manager ne poste pas un rapport officiel avant de le déranger
+        const estUnRapportOfficiel = texteNormalise.includes('ouverture') || 
+                                     texteNormalise.includes('team composition') || 
+                                     texteNormalise.includes('matériel') || 
+                                     texteNormalise.includes('materiel') || 
+                                     texteNormalise.includes('fixture');
+
+        // Déclenchement UNIQUEMENT si on est après 10h ET que ce n'est pas un rapport officiel
+        if (estManagerAutorise && heureActuelle >= 10 && !estUnRapportOfficiel) {
             try {
                 const incidents = await db.getIncidentsNonResolus();
                 
                 // S'il y a des incidents en cours...
                 if (incidents && incidents.length > 0) {
                     
-                    // On vérifie s'il est déjà en train de donner une bonne réponse
                     const tenteDeRepondre = texteNormalise.includes('résolu') || 
                                             texteNormalise.includes('resolu') || 
                                             texteNormalise.includes('non résolu') ||
                                             texteNormalise.includes('non resolu');
                                             
                     if (!tenteDeRepondre) {
-                        
                         const maintenant = Date.now();
                         const dernierRappel = cooldownRelance.get(participantJid) || 0;
                         
-                        // Anti-spam de 15 minutes
-                        if (maintenant - dernierRappel > 15 * 60 * 1000) {
+                        // 🕒 Rythme de relance : 1h d'attente le matin (poli), 15 min l'après-midi (agressif)
+                        const delaiAntiSpam = (heureActuelle < 12) ? (60 * 60 * 1000) : (15 * 60 * 1000); 
+                        
+                        if (maintenant - dernierRappel > delaiAntiSpam) {
                             
                             const idsNonResolus = [...new Set(incidents.map(i => i.machineId))].join(', ');
-                            const exempleId = incidents[0].machineId; // On prend le premier ID pour l'exemple
+                            const exempleId = incidents[0].machineId; 
                             
-                            const msgRappel = `⚠️ @${participantJid.split('@')[0]}, désolé de vous interrompre.\n\n` +
-                                              `Il y a des machines avec un reliquat (non clôturées) en attente : *${idsNonResolus}*.\n` +
-                                              `Si vous n'avez pas encore fait le suivi, merci de répondre exactement avec ce modèle :\n\n` +
-                                              `👉 Si le reliquat est réglé : *${exempleId} résolu*\n` +
-                                              `👉 Si le reliquat persiste : *${exempleId} non résolu*`;
+                            let msgRappel = "";
+                            
+                            if (heureActuelle < 12) {
+                                // 🟢 MATIN (10h-12h) : La relance douce et polie
+                                msgRappel = `👋 Bonjour @${participantJid.split('@')[0]},\n\n` +
+                                            `Est-ce que le problème de non-clôturé pour les IDs *${idsNonResolus}* est résolu ce matin ?\n\n` +
+                                            `📝 *Merci de me répondre avec ce modèle :*\n` +
+                                            `👉 *${exempleId} résolu* (Si c'est réglé)\n` +
+                                            `👉 *${exempleId} non résolu* (Si ça persiste)`;
+                            } else {
+                                // 🔴 APRÈS-MIDI (Dès 12h) : Le bot s'impatiente et "hurle"
+                                msgRappel = `⚠️ @${participantJid.split('@')[0]}, DÉSOLÉ DE VOUS INTERROMPRE !\n\n` +
+                                            `Le reliquat sur les machines *${idsNonResolus}* traîne depuis hier. J'ai besoin d'une réponse de votre part pour la base de données.\n\n` +
+                                            `🚨 *ACTION REQUISE IMMÉDIATEMENT :*\n` +
+                                            `👉 Écrivez *${exempleId} résolu*\n` +
+                                            `👉 Ou *${exempleId} non résolu*`;
+                            }
                             
                             await sock.sendMessage(jid, {
                                 text: msgRappel,
@@ -640,7 +661,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                 console.error("Erreur lors de la vérification du harceleur :", err.message);
             }
         }
-
         // ⛔ Rapports légitimes qui contiennent des IDs+montants mais ne sont PAS des non-clôturés
         const estRapportAutre = (
             texteNormalise.includes('reste caution') ||
