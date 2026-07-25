@@ -23,6 +23,8 @@ function initialiserTourDeControle(sock, etatAttenteRef, memoire, redisClientRef
     redisClient = redisClientRef || null;
     console.log("🗼 Tour de Contrôle activée. Alertes configurées EXCLUSIVEMENT sur Synchro Kinkole...");
 
+    const optionsCron = { timezone: 'Africa/Kinshasa' };
+
     // 1. Rappel Ouverture (09h00)
     cron.schedule('0 9 * * *', async () => {
         verifierEtRappeler(sock, 'ouverture', "d'Ouverture", GROUPE_SYNCHRO);
