@@ -182,7 +182,7 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
             // 5. NOUVEAU : Analyse des pannes et problèmes dans la table Message
             const tousMessages = await prisma.message.findMany({
                 where: { timestamp: { gte: dateLimite } },
-                select: { texte: true, expediteur: true, timestamp: true }
+                select: { texte: true, senderJid: true, timestamp: true }
             });
 
             // On filtre pour ne garder que les messages qui crient "Au secours"
