@@ -138,58 +138,99 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
         return true;
     }
     // =========================================================
-    // 📅 COMMANDE : !semaine (Résumé des 7 derniers jours)
+    // 📅 COMMANDE : !semaine (Résumé des 7 derniers jours par IA)
     // =========================================================
     if (texteNormalise === '!semaine') {
-        await sock.sendMessage(jid, { text: "⏳ *Génération du Bilan Hebdomadaire...*" });
+        await sock.sendMessage(jid, { text: "⏳ *Extraction des données, analyse des pannes et rédaction du rapport en cours...*" });
         try {
-            const il7Jours = new Date();
-            il7Jours.setDate(il7Jours.getDate() - 7);
-            il7Jours.setHours(0, 0, 0, 0);
+            const dateLimite = new Date();
+            dateLimite.setDate(dateLimite.getDate() - 7);
+            dateLimite.setHours(0, 0, 0, 0);
 
-            const rapports = await prisma.report.findMany({
-                where: { timestamp: { gte: il7Jours } },
-                include: { manager: true },
-                orderBy: { timestamp: 'asc' }
-            });
-
-            if (rapports.length === 0) {
-                await sock.sendMessage(jid, { text: `📅 *BILAN HEBDOMADAIRE*\n\nAucun rapport sur les 7 derniers jours.` });
-                return true;
-            }
-
-            // Grouper par jour
-            const parJour = {};
-            for (const r of rapports) {
-                const jour = new Date(r.timestamp).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
-                if (!parJour[jour]) parJour[jour] = {};
-                const type = r.type.replace(/_/g, ' ').toUpperCase();
-                parJour[jour][type] = (parJour[jour][type] || 0) + 1;
-            }
-
-            // Incidents non résolus de la semaine
+            // 1. Incidents / Reliquats
             const incidents = await prisma.incidentCloture.findMany({
-                where: { dateDeclaration: { gte: il7Jours } }
+                where: { dateDeclaration: { gte: dateLimite } }
             });
-            const nonResolus = incidents.filter(i => i.statut === 'NON_RESOLU').length;
+            const totalIncidents = incidents.length;
             const resolus = incidents.filter(i => i.statut === 'RESOLU').length;
+            const nonResolus = incidents.filter(i => i.statut === 'NON_RESOLU').length;
 
-            let msg = `📅 *BILAN HEBDOMADAIRE*\n_7 derniers jours_\n\n`;
-            for (const [jour, types] of Object.entries(parJour)) {
-                msg += `📆 *${jour}*\n`;
-                for (const [type, count] of Object.entries(types)) {
-                    msg += `  ▪️ ${type} (x${count})\n`;
+            // 2. Visites Terrain
+            const visites = await prisma.visiteTerrain.findMany({
+                where: { dateVisite: { gte: dateLimite } }
+            });
+            const totalVisites = visites.length;
+            const pdvPenalises = visites.filter(v => v.statut && v.statut.toLowerCase().includes('pénalis')).length;
+
+            // 3. Pénalités financières
+            const penalites = await prisma.penalite.findMany({
+                where: { dateSaisie: { gte: dateLimite } }
+            });
+            const totalPenalites = penalites.length;
+            let totalAmendes = 0;
+            penalites.forEach(p => {
+                if (p.montant && p.montant.includes('$')) {
+                    totalAmendes += parseInt(p.montant) || 0;
                 }
-                msg += '\n';
-            }
-            msg += `─────────────────\n`;
-            msg += `📊 *Total rapports :* ${rapports.length}\n`;
-            msg += `🚨 *Incidents déclarés :* ${incidents.length} (${resolus} résolus, ${nonResolus} en cours)`;
+            });
 
-            await sock.sendMessage(jid, { text: msg });
+            // 4. Rapports généraux
+            const rapports = await prisma.report.findMany({
+                where: { timestamp: { gte: dateLimite } }
+            });
+
+            // 5. NOUVEAU : Analyse des pannes et problèmes dans la table Message
+            const tousMessages = await prisma.message.findMany({
+                where: { timestamp: { gte: dateLimite } },
+                select: { texte: true, expediteur: true, timestamp: true }
+            });
+
+            // On filtre pour ne garder que les messages qui crient "Au secours"
+            const motsClesProblemes = ['panne', 'problème', 'probleme', 'hs', 'urgence', 'réparation', 'reparation', 'coupure', 'remplacer', 'bloqué', 'bloque', 'souci'];
+            const messagesProblemes = tousMessages.filter(m => 
+                m.texte && motsClesProblemes.some(mot => m.texte.toLowerCase().includes(mot))
+            );
+
+            // On crée un mini-journal des pannes pour l'IA (Limité aux 30 derniers pour ne pas la noyer)
+            let textePannes = "";
+            if (messagesProblemes.length === 0) {
+                textePannes = "- Aucun problème technique ou matériel signalé cette semaine.";
+            } else {
+                // On prend les 30 derniers messages d'alerte et on les tronque pour faire propre
+                messagesProblemes.slice(-30).forEach(m => {
+                    const dateMsg = new Date(m.timestamp).toLocaleDateString('fr-FR', { weekday: 'short' });
+                    const textePropre = m.texte.replace(/\n/g, ' ').substring(0, 100);
+                    textePannes += `- [${dateMsg}] ${m.expediteur || 'Inconnu'} : "${textePropre}..."\n`;
+                });
+            }
+
+            // 6. Préparation des données brutes pour le cerveau de l'IA
+            const donneesBrutes = `
+            📊 VRAIS CHIFFRES DES 7 DERNIERS JOURS :
+            - Total des rapports reçus des managers : ${rapports.length}
+            - Total des machines signalées non-clôturées : ${totalIncidents}
+            - Reliquats réglés/résolus : ${resolus}
+            - Reliquats TOUJOURS en attente (alerte rouge) : ${nonResolus}
+            - Total des points de vente visités par les QS : ${totalVisites} (dont ${pdvPenalises} pénalisés sur le terrain)
+            - Nombre d'amendes/pénalités formelles infligées : ${totalPenalites} (Total estimé : ${totalAmendes}$)
+            
+            🛠️ JOURNAL DES PANNES ET PROBLÈMES TECHNIQUES DE LA SEMAINE :
+            (Nombre total d'alertes détectées : ${messagesProblemes.length})
+            ${textePannes}
+            `;
+
+            // 7. Injection de prompt avec les nouvelles consignes
+            const consigne = `Voici les données EXACTES de la semaine extraites de la base de données PostgreSQL :\n\n${donneesBrutes}\n\nRédige un rapport hebdomadaire très professionnel pour la réunion de direction de demain. \n\nUtilise le format strict du bilan :\n🔥 APPROBATION FINANCIÈRE\n🔴 POINTS D'ATTENTION\n🛠️ INCIDENTS TECHNIQUES (Utilise le journal des pannes fourni pour résumer les problèmes matériels/réseau)\n👥 MANAGERS\n📊 CHIFFRES CLÉS\n🎯 RECOMMANDATIONS\n\nRÈGLE ABSOLUE : Interdiction d'écrire "Non communiqué" pour les chiffres. Utilise uniquement les chiffres et les pannes fournis ci-dessus. Dresse un tableau clair de la situation technique et managériale.`;
+
+            // 8. Envoi à l'IA
+            const { agentRecherche } = require('./agents');
+            const reponseIA = await agentRecherche(consigne, []); 
+            
+            await sock.sendMessage(jid, { text: reponseIA });
+
         } catch (error) {
             console.error('❌ Erreur !semaine:', error);
-            await sock.sendMessage(jid, { text: `❌ Erreur : ${error.message}` });
+            await sock.sendMessage(jid, { text: `❌ Erreur lors de l'extraction des données de la semaine : ${error.message}` });
         }
         return true;
     }
