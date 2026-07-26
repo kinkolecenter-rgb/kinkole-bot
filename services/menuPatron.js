@@ -285,54 +285,67 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
         return true;
     }
 
-    // =========================================================
-    // 📡 COMMANDE : !statut (État en temps réel)
+// =========================================================
+    // 📡 COMMANDE : !statut (État en temps réel intelligent)
     // =========================================================
     if (texteNormalise === '!statut') {
+        await sock.sendMessage(jid, { text: "⏳ *Balayage du centre en cours... Analyse de la situation en temps réel.*" });
         try {
             const aujourdhui = new Date();
             aujourdhui.setHours(0, 0, 0, 0);
 
+            // 1. Rapports reçus aujourd'hui
             const rapports = await prisma.report.findMany({
                 where: { timestamp: { gte: aujourdhui } },
                 include: { manager: true },
                 orderBy: { timestamp: 'desc' }
             });
 
+            const typesRecus = [...new Set(rapports.map(r => r.type))];
+            const tousTypes = ['ouverture', 'fixture', 'details_connexion', 'fermeture', 'coffre'];
+            
+            let checklist = tousTypes.map(type => {
+                return typesRecus.includes(type) ? `✅ ${type.toUpperCase()}` : `❌ ${type.toUpperCase()} (Manquant)`;
+            }).join('\n');
+
+            // 2. Incidents non résolus
             const incidents = await prisma.incidentCloture.findMany({
                 where: { statut: 'NON_RESOLU' }
             });
+            let alerteIncidents = incidents.length > 0 
+                ? `${incidents.length} reliquats en cours (IDs: ${incidents.map(i => i.machineId).join(', ')})` 
+                : "Aucun reliquat en cours, les caisses sont clean !";
 
-            const typesRecus = [...new Set(rapports.map(r => r.type))];
-            const tousTypes = ['ouverture', 'fixture', 'details_connexion', 'fermeture', 'coffre'];
-
-            const heure = new Date().getHours();
-            let msg = `📡 *STATUT EN TEMPS RÉEL*\n_${new Date().toLocaleString('fr-FR')}_\n\n`;
-
-            msg += `📋 *Rapports du jour :*\n`;
-            for (const type of tousTypes) {
-                const recu = typesRecus.includes(type);
-                const nomJoli = type.replace(/_/g, ' ').toUpperCase();
-                msg += recu ? `✅ ${nomJoli}\n` : `❌ ${nomJoli}\n`;
-            }
-
-            msg += `\n🚨 *Incidents non résolus :* ${incidents.length === 0 ? 'Aucun ✅' : incidents.length + ' en cours ⚠️'}\n`;
-
-            if (incidents.length > 0) {
-                msg += incidents.map(i => `  • ID ${i.machineId} = ${i.montant} FC`).join('\n') + '\n';
-            }
-
+            // 3. Dernier signe de vie
+            let dernierSigne = "Aucune activité n'a encore été enregistrée aujourd'hui.";
             if (rapports.length > 0) {
                 const dernier = rapports[0];
-                const nomMgr = dernier.manager?.nom || 'Inconnu';
+                const nomMgr = dernier.manager?.nom || dernier.managerJid.split('@')[0];
                 const heureMsg = new Date(dernier.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                msg += `\n⏱️ *Dernier rapport :* ${dernier.type.replace(/_/g, ' ')} par *${nomMgr}* à ${heureMsg}`;
+                dernierSigne = `Dernière action : ${nomMgr} a envoyé le rapport [${dernier.type.replace(/_/g, ' ')}] à ${heureMsg}.`;
             }
 
-            await sock.sendMessage(jid, { text: msg });
+            // 4. Préparation des données brutes pour l'IA
+            const donneesBrutes = `
+            ÉTAT DU CENTRE À L'INSTANT T :
+            - Checklist des rapports vitaux :
+            ${checklist}
+            - Urgences / Reliquats : ${alerteIncidents}
+            - Activité récente : ${dernierSigne}
+            `;
+
+            // 5. Injection du prompt pour l'IA
+            const consigne = `Tu es le copilote IA du Center Manager. Voici les données brutes du centre en ce moment même :\n\n${donneesBrutes}\n\nFais un point de situation (SitRep) très court, punchy et naturel (maximum 5 à 6 lignes). \n\nParle-lui directement comme un bras droit : dis-lui ce qui va bien (rapports reçus), alerte-le sur ce qui manque ou s'il y a des reliquats, et mentionne qui a donné le dernier signe de vie. Utilise des émojis pour rendre ça dynamique.`;
+
+            // 6. Envoi au cerveau IA
+            const { agentRecherche } = require('./agents');
+            const reponseIA = await agentRecherche(consigne, []);
+
+            await sock.sendMessage(jid, { text: `📡 *SITREP KINKOLE*\n\n${reponseIA}` });
+
         } catch (error) {
             console.error('❌ Erreur !statut:', error);
-            await sock.sendMessage(jid, { text: `❌ Erreur : ${error.message}` });
+            await sock.sendMessage(jid, { text: `❌ Erreur lors de l'analyse du statut : ${error.message}` });
         }
         return true;
     }
