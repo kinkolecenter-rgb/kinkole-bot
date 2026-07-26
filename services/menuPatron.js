@@ -41,10 +41,10 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
     }
 
     // =========================================================
-    // 📊 COMMANDE : !bilan (Traçage exact des Collaborateurs VIP)
+    // 📊 COMMANDE : !bilan (Évaluation Intelligente des Managers VIP)
     // =========================================================
     if (texteNormalise === '!bilan') {
-        await sock.sendMessage(jid, { text: "⏳ *Génération du Bilan VIP en cours...*" });
+        await sock.sendMessage(jid, { text: "⏳ *Extraction de l'activité et analyse RH des managers VIP en cours...*" });
 
         try {
             const aujourdhui = new Date();
@@ -61,7 +61,7 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
                 '265515029283001@lid': { nom: 'Deborah K 7', role: 'Ass. Manager' }
             };
 
-            // 2. Dictionnaire exhaustif de tes 15 groupes surveillés
+            // 2. Dictionnaire exhaustif de tes groupes surveillés
             const groupesConnus = {
                 '120363021280044937@g.us': 'Synchro Kinkole',
                 '120363023010071105@g.us': 'Synchro Kinkole pos',
@@ -82,7 +82,7 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
 
             const jidsVIP = Object.keys(listeManagersVIP);
 
-            // 3. On récupère TOUS les messages envoyés par CES LIDs aujourd'hui, dans TOUS les groupes
+            // 3. Récupération des messages du jour depuis PostgreSQL
             const messagesVIP = await prisma.message.findMany({
                 where: {
                     timestamp: { gte: aujourdhui },
@@ -91,52 +91,53 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
                 orderBy: { timestamp: 'asc' }
             });
 
-            if (messagesVIP.length === 0) {
-                await sock.sendMessage(jid, { text: "📊 *BILAN DES COLLABORATEURS VIP*\n\nAucune activité détectée pour ces managers aujourd'hui." });
-                return true;
-            }
-
-            // 4. On construit le message WhatsApp
-            let messageBilan = `📊 *BILAN DES COLLABORATEURS VIP* (${new Date().toLocaleDateString('fr-FR')})\n\n`;
-
+            // 4. Préparation du journal d'activité pour l'IA
+            let journalActivite = "";
             for (const [lid, infos] of Object.entries(listeManagersVIP)) {
-                // On filtre les messages de ce manager spécifique
                 const msgsDuManager = messagesVIP.filter(m => m.senderJid === lid);
                 
                 if (msgsDuManager.length > 0) {
-                    messageBilan += `👤 *${infos.nom}* :\n`;
-                    
-                    for (const m of msgsDuManager) {
-                        // On trouve le nom du groupe (ou on garde "un groupe" si l'ID n'est pas dans le dictionnaire)
+                    journalActivite += `\n👤 MANAGER : ${infos.nom} (${infos.role}) - ${msgsDuManager.length} messages envoyés\n`;
+                    msgsDuManager.forEach(m => {
                         let nomGroupe = groupesConnus[m.groupeJid] || 'un groupe';
-
-                        // On prend la première ligne du message pour faire un résumé propre
-                        let apercu = "Média / Image / Audio";
-                        if (m.texte) {
-                            // Trouve la première ligne qui n'est pas vide
-                            const lignes = m.texte.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                            if (lignes.length > 0) {
-                                // Coupe à 45 caractères pour ne pas faire un message kilométrique
-                                apercu = lignes[0].length > 45 ? lignes[0].substring(0, 45) + '...' : lignes[0];
-                            }
-                        }
-
-                        // Format final : ▪️ dans Composition : compo shift1
-                        messageBilan += `  ▪️ dans *${nomGroupe}* : _${apercu}_\n`;
-                    }
-                    messageBilan += `\n`;
+                        let texte = m.texte ? m.texte.replace(/\n/g, ' ').substring(0, 100) : "[Média/Image envoyé]";
+                        journalActivite += `- [${nomGroupe}] : "${texte}"\n`;
+                    });
+                } else {
+                    journalActivite += `\n👤 MANAGER : ${infos.nom} (${infos.role}) - 🔴 SILENCE TOTAL (Aucune activité détectée aujourd'hui)\n`;
                 }
             }
 
-            // On envoie le résultat final au Boss
-            await sock.sendMessage(jid, { text: messageBilan });
+            if (messagesVIP.length === 0) {
+                journalActivite = "Aucune activité détectée pour l'ensemble des managers VIP aujourd'hui.";
+            }
+
+            // 5. Instruction stricte (Prompt) pour forcer le rôle de l'IA
+            const consigne = `Tu es l'analyste RH et bras droit du Boss (Center Manager). Je te donne ci-dessous l'activité WhatsApp stricte des Managers et Assistants Managers d'aujourd'hui.
+
+            ${journalActivite}
+
+            Rédige un bilan de performance individuel. 
+            Format exigé :
+            - Évalue chaque manager avec une puce et un indicateur clair : 🟢 (Proactif/Actif), 🟡 (Activité faible/Incomplète), 🔴 (Inactif/Suspect).
+            - Explique brièvement ce qu'ils ont accompli aujourd'hui d'après leurs messages (Rapports envoyés ? Gestion de crise ?).
+            - Sois ferme et objectif. Si un manager n'a rien dit (silence total), signale-le immédiatement comme une absence ou un manque de reporting.
+            - Termine par un court paragraphe "🎯 AVIS AU BOSS" avec ton conseil direct.`;
+
+            // 6. Envoi au cerveau IA
+            const { agentRecherche } = require('./agents');
+            const reponseIA = await agentRecherche(consigne, []); 
+            
+            await sock.sendMessage(jid, { text: reponseIA });
 
         } catch (error) {
             console.error('❌ Erreur Commande !bilan:', error);
-            await sock.sendMessage(jid, { text: "❌ *Erreur* : Impossible de générer le bilan pour le moment." });
+            await sock.sendMessage(jid, { text: "❌ *Erreur* : Impossible de générer le bilan intelligent pour le moment." });
         }
         return true;
     }
+    
+    
     // =========================================================
     // 📅 COMMANDE : !semaine (Résumé des 7 derniers jours par IA)
     // =========================================================
