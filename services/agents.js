@@ -105,10 +105,17 @@ async function appelerIA(systemPrompt, messages, historique = []) {
             });
             const data = await response.json();
             if (!data.error && data.choices?.[0]?.message?.content) {
-                console.log(`✅ IA via ${model}`);
                 let rep = data.choices[0].message.content;
+                
+                // 🛑 BOUCLIER ANTI-CENSURE : Si l'IA refuse de répondre, on déclenche une erreur
+                if (rep.includes('User Safety:') || rep.includes('Response Safety:')) {
+                    throw new Error('Blocage de sécurité IA détecté (Faux positif).');
+                }
+
+                console.log(`✅ IA via ${model}`);
                 rep = rep.replace(/<think>[\s\S]*?<\/think>\n*/g, '').trim();
                 rep = rep.replace(/\*\*([^*]+)\*\*/g, '*$1*');
+                
                 return rep;
             }
         } catch (e) {
