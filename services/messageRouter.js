@@ -324,13 +324,54 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         }
 
         // =========================================================
-        // 👑 INTERCEPTEUR : COMMANDES SECRÈTES DU PATRON (EN PRIVÉ)
+        // 👑 INTERCEPTEUR : COMMANDES SECRÈTES ET LANGAGE NATUREL
         // =========================================================
         if (!jid.includes('@g.us')) { 
             const texteBrut = extraireTexte(msg);
+            
+            // 1. Exécution rapide si tu utilises la commande stricte (ex: !semaine)
             if (texteBrut.startsWith('!')) {
                 const commandeTraitee = await gererCommandesPatron(sock, jid, texteBrut);
                 if (commandeTraitee) continue;
+            }
+            // 2. La Magie du Langage Naturel (Si tu lui parles normalement)
+            else {
+                const idBrut = jid.split('@')[0].split(':')[0]; 
+                const identifiantsAutorises = [String(config.monNumero), String(config.secondaireNumero), String(config.monLid), String(config.secondaireLid)];
+                
+                // On ne déclenche l'analyse que si c'est le Boss et que la phrase fait plus de 10 caractères
+                if (identifiantsAutorises.includes(idBrut) && texteBrut.length > 10) {
+                    
+                    // On fait appel au routeur d'intentions de l'IA
+                    const { agentIntention } = require('./agents');
+                    const analyse = await agentIntention(texteBrut, []);
+                    
+                    let commandeSecrete = null;
+                    const texteMinuscule = texteBrut.toLowerCase();
+
+                    // 🧠 Traduction des phrases humaines en commandes machines :
+                    if (analyse.intention === 'performance' || texteMinuscule.includes('bilan des manager') || texteMinuscule.includes('activité des manager')) {
+                        commandeSecrete = '!bilan';
+                    }
+                    else if (analyse.intention === 'rapport' && (texteMinuscule.includes('semaine') || texteMinuscule.includes('7 jours'))) {
+                        commandeSecrete = '!semaine';
+                    }
+                    else if (analyse.intention === 'incidents' && texteMinuscule.includes('non résolu')) {
+                        commandeSecrete = '!incidents';
+                    }
+                    else if (analyse.intention === 'etat_centre' || texteMinuscule.includes('statut') || texteMinuscule.includes('temps réel')) {
+                        commandeSecrete = '!statut';
+                    }
+
+                    // 🚀 Si l'IA a compris ce que tu voulais, elle lance la commande secrète
+                    if (commandeSecrete) {
+                        console.log(`🧠 [NLP] Le boss a dit "${texteBrut}". L'IA exécute secrètement : ${commandeSecrete}`);
+                        const commandeTraitee = await gererCommandesPatron(sock, jid, commandeSecrete);
+                        
+                        // Si la commande a fonctionné, on arrête ici pour ne pas relancer une conversation IA normale
+                        if (commandeTraitee) continue; 
+                    }
+                }
             }
         }
 
