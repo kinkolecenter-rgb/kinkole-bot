@@ -162,45 +162,63 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
             const totalVisites = visites.length;
             const pdvPenalises = visites.filter(v => v.statut && v.statut.toLowerCase().includes('pénalis')).length;
 
-            // 3. Pénalités financières
+            // 3. Pénalités financières et catégorisation des motifs
             const penalites = await prisma.penalite.findMany({
                 where: { dateSaisie: { gte: dateLimite } }
             });
             const totalPenalites = penalites.length;
-            let totalAmendes = 0;
+            let totalPenalitesUSD = 0;
+            const compteurMotifs = {}; // Dictionnaire pour regrouper les motifs
+
             penalites.forEach(p => {
+                // Calcul de l'argent retenu
                 if (p.montant && p.montant.includes('$')) {
-                    totalAmendes += parseInt(p.montant) || 0;
+                    totalPenalitesUSD += parseInt(p.montant) || 0;
+                }
+                
+                // Comptage des motifs (parasol, table, non port t-shirt, gilet...)
+                if (p.motif) {
+                    const motifPropre = p.motif.toLowerCase().trim();
+                    compteurMotifs[motifPropre] = (compteurMotifs[motifPropre] || 0) + 1;
                 }
             });
+
+            // Transformation du dictionnaire en liste de texte
+            let detailMotifs = "";
+            if (Object.keys(compteurMotifs).length > 0) {
+                detailMotifs = Object.entries(compteurMotifs)
+                    .sort((a, b) => b[1] - a[1]) // Trie du plus fréquent au moins fréquent
+                    .map(([motif, count]) => `${count}x ${motif}`)
+                    .join(' | ');
+            } else {
+                detailMotifs = "Motifs non précisés";
+            }
 
             // 4. Rapports généraux
             const rapports = await prisma.report.findMany({
                 where: { timestamp: { gte: dateLimite } }
             });
 
-            // 5. NOUVEAU : Analyse des pannes et problèmes dans la table Message
+            // 5. Analyse des pannes et problèmes dans la table Message
             const tousMessages = await prisma.message.findMany({
                 where: { timestamp: { gte: dateLimite } },
                 select: { texte: true, senderJid: true, timestamp: true }
             });
 
-            // On filtre pour ne garder que les messages qui crient "Au secours"
             const motsClesProblemes = ['panne', 'problème', 'probleme', 'hs', 'urgence', 'réparation', 'reparation', 'coupure', 'remplacer', 'bloqué', 'bloque', 'souci'];
             const messagesProblemes = tousMessages.filter(m => 
                 m.texte && motsClesProblemes.some(mot => m.texte.toLowerCase().includes(mot))
             );
 
-            // On crée un mini-journal des pannes pour l'IA (Limité aux 30 derniers pour ne pas la noyer)
             let textePannes = "";
             if (messagesProblemes.length === 0) {
                 textePannes = "- Aucun problème technique ou matériel signalé cette semaine.";
             } else {
-                // On prend les 30 derniers messages d'alerte et on les tronque pour faire propre
                 messagesProblemes.slice(-30).forEach(m => {
                     const dateMsg = new Date(m.timestamp).toLocaleDateString('fr-FR', { weekday: 'short' });
                     const textePropre = m.texte.replace(/\n/g, ' ').substring(0, 100);
-                    textePannes += `- [${dateMsg}] ${m.expediteur || 'Inconnu'} : "${textePropre}..."\n`;
+                    const identifiant = m.senderJid ? m.senderJid.split('@')[0] : 'Inconnu';
+                    textePannes += `- [${dateMsg}] ID ${identifiant} : "${textePropre}..."\n`;
                 });
             }
 
@@ -212,16 +230,18 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
             - Reliquats réglés/résolus : ${resolus}
             - Reliquats TOUJOURS en attente (alerte rouge) : ${nonResolus}
             - Total des points de vente visités par les QS : ${totalVisites} (dont ${pdvPenalises} pénalisés sur le terrain)
-            - Nombre d'amendes/pénalités formelles infligées : ${totalPenalites} (Total estimé : ${totalAmendes}$)
+            
+            🛑 DÉTAIL DES PÉNALITÉS ET SANCTIONS :
+            - Nombre de pénalités infligées : ${totalPenalites} (Total retenu : ${totalPenalitesUSD}$)
+            - Détail strict des infractions : ${detailMotifs}
             
             🛠️ JOURNAL DES PANNES ET PROBLÈMES TECHNIQUES DE LA SEMAINE :
             (Nombre total d'alertes détectées : ${messagesProblemes.length})
             ${textePannes}
             `;
 
-            // 7. Injection de prompt avec les nouvelles consignes
-            const consigne = `Voici les données EXACTES de la semaine extraites de la base de données PostgreSQL :\n\n${donneesBrutes}\n\nRédige un rapport hebdomadaire très professionnel pour la réunion de direction de demain. \n\nUtilise le format strict du bilan :\n🔥 APPROBATION FINANCIÈRE\n🔴 POINTS D'ATTENTION\n🛠️ INCIDENTS TECHNIQUES (Utilise le journal des pannes fourni pour résumer les problèmes matériels/réseau)\n👥 MANAGERS\n📊 CHIFFRES CLÉS\n🎯 RECOMMANDATIONS\n\nRÈGLE ABSOLUE : Interdiction d'écrire "Non communiqué" pour les chiffres. Utilise uniquement les chiffres et les pannes fournis ci-dessus. Dresse un tableau clair de la situation technique et managériale.`;
-
+            // 7. Injection de prompt avec consigne ultra-stricte sur le vocabulaire
+            const consigne = `Voici les données EXACTES de la semaine extraites de la base de données PostgreSQL :\n\n${donneesBrutes}\n\nRédige un rapport hebdomadaire très professionnel pour la réunion de direction de demain. \n\nUtilise le format strict du bilan :\n🔥 APPROBATION FINANCIÈRE\n🔴 POINTS D'ATTENTION\n🛠️ INCIDENTS TECHNIQUES\n👥 MANAGERS\n📊 CHIFFRES CLÉS (Tu DOIS lister en détail les infractions commises : non port t-shirt, non port gilet, table, parasol, etc. d'après les détails fournis)\n🎯 RECOMMANDATIONS\n\nRÈGLE ABSOLUE 1 : N'utilise JAMAIS le mot "amendes", utilise UNIQUEMENT le terme "pénalités".\nRÈGLE ABSOLUE 2 : Les pénalités sont des sanctions financières infligées aux agents fautifs sur le terrain. Ce n'est pas une dette du centre, c'est de l'argent recouvré/sanctionné pour non-respect des règles (tenue, matériel).\nRÈGLE ABSOLUE 3 : Utilise uniquement les chiffres fournis.`;
             // 8. Envoi à l'IA
             const { agentRecherche } = require('./agents');
             const reponseIA = await agentRecherche(consigne, []); 
