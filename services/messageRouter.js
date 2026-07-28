@@ -340,7 +340,8 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
                 const identifiantsAutorises = [String(config.monNumero), String(config.secondaireNumero), String(config.monLid), String(config.secondaireLid)];
                 
                 // On ne déclenche l'analyse que si c'est le Boss et que la phrase fait plus de 10 caractères
-                if (identifiantsAutorises.includes(idBrut) && texteBrut.length > 10) {
+                const texteMinusculeCheck = texteBrut.toLowerCase();
+                    if (identifiantsAutorises.includes(idBrut) && texteBrut.length > 10 && !texteMinusculeCheck.includes('coffre')) {
                     
                     // On fait appel au routeur d'intentions de l'IA
                     const { agentIntention } = require('./agents');
