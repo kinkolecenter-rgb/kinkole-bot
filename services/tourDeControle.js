@@ -86,12 +86,23 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
             let responsable = '';
             try {
+                const heureActuelle = new Date().getHours();
                 const debutService = new Date();
-                debutService.setHours(16, 0, 0, 0);
-                const finService = new Date();
-                finService.setHours(23, 0, 0, 0);
+                let texteHeure = "";
 
-                // 🔍 On cherche les messages uniques (Correction: timestamp au lieu de createdAt)
+                if (heureActuelle < 14) {
+                    // ☀️ Le matin (9h, 10h) : On cherche qui a parlé depuis 6h du matin
+                    debutService.setHours(6, 0, 0, 0);
+                    texteHeure = "06h";
+                } else {
+                    // 🌙 Le soir (22h30) : On cherche l'équipe de l'après-midi/soir (depuis 16h)
+                    debutService.setHours(16, 0, 0, 0);
+                    texteHeure = "16h";
+                }
+                
+                const finService = new Date(); // L'heure actuelle exacte
+
+                // 🔍 On cherche les messages dans ce créneau
                 const messagesService = await db.prisma.message.findMany({
                     where: {
                         groupeJid: GROUPE_SYNCHRO,
@@ -100,9 +111,7 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
                             lte: finService
                         }
                     },
-                    select: {
-                        senderJid: true
-                    },
+                    select: { senderJid: true },
                     distinct: ['senderJid']
                 });
 
@@ -115,11 +124,11 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
 
                     if (managersActifs && managersActifs.length > 0) {
                         const noms = managersActifs.map(m => m.nom).join(', ');
-                        responsable = `\n👤 *Responsables en service (16h-23h) :* ${noms}`;
+                        responsable = `\n👤 *Responsables en service (depuis ${texteHeure}) :* ${noms}`;
                     }
                 }
                 
-                if (!responsable) responsable = `\n👤 *Responsables en service :* Aucun manager détecté actif dans Synchro depuis 16h.`;
+                if (!responsable) responsable = `\n👤 *Responsables en service :* Aucun manager détecté actif dans Synchro depuis ${texteHeure}.`;
 
             } catch (e) {
                 console.error('⚠️ Erreur filtrage managers en service:', e.message);
