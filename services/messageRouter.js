@@ -527,7 +527,7 @@ async function lancerRattrapageAutomatique(sock, db) {
                         const pages = 8;
                         const copiesParAgent = 2;
                         const totalParAgent = (pages * copiesParAgent) + (d.loto || 0) + (d.giga || 0) + (d.felicitation || 0);
-                        const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\nNb. Pages: ${pages}\nNb.Copies par agent: ${copiesParAgent}\nFixture (other)\nloto: ${d.loto || 0}\nGiga: ${d.giga || 0}\nFélicitation : ${d.felicitation || 0}\nTotal/agt: ${totalParAgent}\n----------------\nTaux de change\nAchat: ${d.taux_achat || '?'}\nVente: ${d.taux_vente || '?'}`;
+                        const rapportFixtureFinal = `*Fixtures sport betting kingasani shop*\nNb. Pages: ${pages}\nNb.Copies par agent: ${copiesParAgent}\nFixture (other)\nloto: ${d.loto || 0}\nGiga: ${d.giga || 0}\nFélicitation : ${d.felicitation || 0}\nTotal/agt: ${totalParAgent}\n----------------\nTaux de change\nAchat: ${d.taux_achat || '?'}\nVente: ${d.taux_vente || '?'}`;
                         await sock.sendMessage(config.groupesDestination.rate_fixture.id, { text: rapportFixtureFinal });
                     }
                     else if (typeLocal === 'fermeture' || typeLocal === 'details_connexion') {
