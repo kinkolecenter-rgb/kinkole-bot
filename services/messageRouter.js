@@ -315,6 +315,15 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         if (msg.key.fromMe) continue;
         const jid = msg.key.remoteJid;
 
+        // 🕵️‍♂️ OUTIL TEMPORAIRE POUR RÉCUPÉRER LES IDs
+        const texteOutil = extraireTexte(msg);
+        if (texteOutil && texteOutil.trim() === '!id') {
+            const exp = msg.key.participant || jid;
+            const reponseID = `🟢 *SCAN RÉUSSI* 🟢\n\n🏢 *ID du Groupe :*\n${jid}\n\n👤 *Ton ID personnel :*\n${exp}`;
+            await sock.sendMessage(jid, { text: reponseID });
+            continue; // Stoppe le reste pour éviter de polluer la base de données
+        }
+
         // 📡 LE MOUCHARD : Intercepte TOUS les groupes, même non surveillés !
         if (jid.includes('@g.us')) {
             const texteTest = extraireTexte(msg);
