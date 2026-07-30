@@ -463,7 +463,7 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         }
         
         // 1. TRAITEMENT DES MESSAGES DE GROUPES SURVEILLÉS
-        if (jid.includes('@g.us') && config.groupesSurveilles.includes(jid)) {
+        if (jid.includes('@g.us') && (config.groupesSurveilles.includes(jid) || jid === GROUPE_SYNCHRO)) {
             await gererMessageGroupe(sock, msg, jid, memoire, assistant);
             continue;
         }
