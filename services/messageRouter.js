@@ -22,12 +22,12 @@ async function getCachePages() {
     return 8; // valeur par défaut
 }
 
-const GROUPE_SYNCHRO    = '120363021280044937@g.us';
+const GROUPE_SYNCHRO    = '243906226846-1565006518@g.us';
 const GROUPE_DISPARUS   = '243900435187-1564716535@g.us';
 
 // Les groupes
 const NOMS_GROUPES = {
-    '120363021280044937@g.us': 'Synchro Kinkole',
+    '243906226846-1565006518@g.us': 'Synchro Kingasani',
     '120363023010071105@g.us': 'Synchro Kinkole pos',
     '120363025487823123@g.us': 'Winner Shop kinkole',
     '120363040045715280@g.us': 'Rapport PR terrain kinko',
@@ -557,6 +557,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         '265515029283001@lid', // Deborah Kavunga
         '90263603159168@lid',  // Trésor bk
         '169230989307948@lid'  // Erick kenzo (Eric pos man)
+        '51583027036329@lid'   // Vero (Ass. Manager)
     ];
     const estManagerAutorise = MANAGERS_AUTORISES.includes(participantJid);
 
