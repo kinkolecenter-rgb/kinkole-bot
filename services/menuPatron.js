@@ -58,7 +58,8 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
                 '265029714768018@lid': { nom: 'Collaborateur 4', role: 'Ass. Manager' },
                 '152059408036054@lid': { nom: 'Collaborateur 5', role: 'Manager' },
                 '169230989307948@lid': { nom: 'Collaborateur 6', role: 'Manager' },
-                '265515029283001@lid': { nom: 'Deborah K 7', role: 'Ass. Manager' }
+                '265515029283001@lid': { nom: 'Deborah K 7', role: 'Ass. Manager' },
+                '51583027036329@lid':  { nom: 'Vero', role: 'Ass. Manager' }
             };
 
             // 2. Dictionnaire exhaustif de tes groupes surveillés
