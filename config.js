@@ -15,6 +15,7 @@ module.exports = {
     },
     groupesSurveilles: [
         '120363021280044937@g.us',
+        '243906226846-1565006518@g.us',
         '120363023010071105@g.us',
         '120363025487823123@g.us',
         '120363040045715280@g.us',
@@ -40,7 +41,7 @@ module.exports = {
         // 👇 TES DEUX COMPTES AJOUTÉS ICI (Les Boss)
         //'204685424214253@lid': { nom: 'Boss Principal', role: 'Admin' },
         '138277243904251@lid': { nom: 'Boss Secondaire', role: 'Admin' },
-        
+        '51583027036329@lid': { nom: 'Vero', role: 'Ass. Manager' },
         '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
         '90263603159168@lid':  { nom: 'Collaborateur 2', role: 'Manager' },
         '42967356150013@lid':  { nom: 'Collaborateur 3', role: 'Ass. Manager' },
@@ -52,5 +53,5 @@ module.exports = {
     heuresBrief:   ['10:00', '12:00', '17:00'],
     heuresCoffre:  ['10:00', '22:30'],
     heureFixture:  '05:30',
-    collaborateurs: ['Eric', 'Timothée', 'Déborah', 'Trésor']
+    collaborateurs: ['Eric', 'Timothée', 'Déborah', 'Trésor','Vero']
 };
