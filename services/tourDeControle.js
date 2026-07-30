@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const config = require('../config');
 const db = require('./database'); 
 
-const GROUPE_SYNCHRO  = '120363021280044937@g.us';
+const GROUPE_SYNCHRO  = '243906226846-1565006518@g.us';
 const GROUPE_DISPARUS = '243900435187-1564716535@g.us';
 
 // Importé depuis messageRouter pour activer l'état d'attente après la question de 23h
