@@ -557,7 +557,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         '265515029283001@lid', // Deborah Kavunga
         '90263603159168@lid',  // Trésor bk
         '169230989307948@lid',  // Erick kenzo (Eric pos man)
-        '51583027036329@lid'   // Vero (Ass. Manager)
+        '51583027036329@lid',   // Vero (Ass. Manager)
+        '155023019364375@lid' // Blaise (Ass. Manager)
     ];
     const estManagerAutorise = MANAGERS_AUTORISES.includes(participantJid);
 
