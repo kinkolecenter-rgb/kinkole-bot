@@ -162,19 +162,24 @@ function analyserRapport(texte) {
 
 /**
  * Formate un rapport de coffre brut en un modèle propre et standardisé
+ * (Format strict avec étoiles * demandé par la direction)
  */
 function formaterRapportCoffre(texteBrut) {
-    const txt = texteBrut.toLowerCase().replace(/\n/g, ' ');
+    const txt = texteBrut.toLowerCase();
 
     let statut = "OK ✅";
     let exceptions = [];
     let ecarts = [];
     let usdStatus = null;
+    let extras = [];
 
+    // 1. Détection des exceptions classiques
     if (txt.includes('collect')) exceptions.push('Collecte');
     if (txt.includes('retenu')) exceptions.push('Retenues');
     if (txt.includes('salaire')) exceptions.push('Salaires');
 
+    // 2. Détection des écarts (Surplus / Reliquat)
+    // Va automatiquement capturer des phrases comme "Reliquat de 66.400"
     const matchEcart = txt.match(/(surplus|reliquat)[\s\S]*?(\d+[\.\,]*\d*\s*(cdf|fc)?)/gi);
     if (matchEcart) {
         statut = "À VÉRIFIER ⚠️";
@@ -184,6 +189,7 @@ function formaterRapportCoffre(texteBrut) {
         ecarts.push("Vérification BackOffice requise");
     }
 
+    // 3. Détection USD
     if (txt.includes('usd')) {
         if (txt.includes('update') || txt.includes('adapted') || txt.includes('updated')) {
             usdStatus = "Updated ✅";
@@ -192,17 +198,46 @@ function formaterRapportCoffre(texteBrut) {
         }
     }
 
-    let header = usdStatus ? "🔒 *RAPPORT COFFRE DU SOIR*" : "🔒 *RAPPORT COFFRE DU MATIN*";
-    let msg = `${header}\n\n• *Statut* : ${statut}\n`;
+    // 4. Capture des puces personnalisées (Notes additionnelles)
+    const lignes = texteBrut.split('\n');
+    for (let ligne of lignes) {
+        const lignePropre = ligne.trim();
+        const ligneMin = lignePropre.toLowerCase();
+        
+        if (lignePropre.match(/^[\*\•\-]/)) {
+            let textePuce = lignePropre.substring(1).trim();
+            
+            // On exclut ce qui est déjà traité pour ne pas faire de doublons
+            if (!ligneMin.includes('collect') && 
+                !ligneMin.includes('retenu') && 
+                !ligneMin.includes('salaire') && 
+                !ligneMin.includes('usd') &&
+                !ligneMin.includes('surplus') && 
+                !ligneMin.includes('reliquat')) {
+                
+                if (textePuce.length > 0) {
+                    extras.push(textePuce.charAt(0).toUpperCase() + textePuce.slice(1));
+                }
+            }
+        }
+    }
+
+    // 5. Construction du message final (DESIGN EXACT)
+    let header = txt.includes('usd') ? "🔒 *RAPPORT COFFRE DU SOIR*" : "🔒 *RAPPORT COFFRE DU MATIN*";
+    let msg = `${header}\n\n* Statut : ${statut}\n`;
     
-    msg += `• *Hormis* : ${exceptions.length > 0 ? exceptions.join(', ') : 'Rien'}\n`;
+    msg += `* Hormis : ${exceptions.length > 0 ? exceptions.join(', ') : 'Rien'}\n`;
 
     if (ecarts.length > 0) {
-        msg += `• *Écarts signalés* :\n${ecarts.map(e => `  - ${e}`).join('\n')}\n`;
+        msg += `* Écarts signalés :\n${ecarts.map(e => `  - ${e}`).join('\n')}\n`;
     }
 
     if (usdStatus) {
-        msg += `• *USD* : ${usdStatus}\n`;
+        msg += `* USD : ${usdStatus}\n`;
+    }
+    
+    if (extras.length > 0) {
+        msg += `* Notes Additionnelles :\n${extras.map(e => `  - ${e}`).join('\n')}\n`;
     }
 
     return msg;
