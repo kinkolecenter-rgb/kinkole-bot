@@ -1088,7 +1088,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                 const felicitation = d.felicitation || 0;
                 const totalParAgent = (pages * copiesParAgent) + loto + giga + felicitation;
 
-                const rapportFixtureFinal = `*Fixtures sport betting kinkole shop*\n` +
+                const rapportFixtureFinal = `*Fixtures sport betting kingasani shop*\n` +
                                             `Nb. Pages: ${pages}\n` +
                                             `Nb.Copies par agent: ${copiesParAgent}\n` +
                                             `Fixture (other)\n` +
