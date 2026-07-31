@@ -334,7 +334,7 @@ module.exports = function creerAssistant(sock, memoire, contexte, redis) {
             const feli  = parseInt(texte.match(/[Ff]élicitation\s*:?\s*(\d+)/)?.[1] || '0');
             const total = (nbPages * 2) + loto + giga + feli;
             const rapportFixture =
-                `Fixtures sport betting kinkole shop\nNb. Pages: ${nbPages}\nNb.Copies par agent: 2\n` +
+                `Fixtures sport betting kingasani shop\nNb. Pages: ${nbPages}\nNb.Copies par agent: 2\n` +
                 `Fixture (other)\nloto: ${loto}\nGiga: ${giga}\nFélicitation : ${feli}\nTotal/agt: ${total}\n` +
                 `Taux de change\nAchat: ${achat}\nVente: ${vente}`;
             await send(`📋 *FIXTURE GÉNÉRÉE*\n\n${rapportFixture}\n\n──────────────\nEnvoie *OUI* pour publier dans Rates&Fixtures.`);
