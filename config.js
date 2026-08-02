@@ -42,6 +42,8 @@ module.exports = {
         //'204685424214253@lid': { nom: 'Boss Principal', role: 'Admin' },
         '138277243904251@lid': { nom: 'Boss Secondaire', role: 'Admin' },
         '51583027036329@lid': { nom: 'Vero', role: 'Ass. Manager' },
+        '55456802304094@lid': { nom: 'Guy', role: 'Manager Shop' },
+        '104883655057593@lid': { nom: 'Josias', role: 'Manager POS' },
         '155023019364375@lid': { nom: 'Blaise', role: 'Ass. Manager' },
         '178499008630811@lid': { nom: 'Collaborateur 1', role: 'Manager' },
         '90263603159168@lid':  { nom: 'Collaborateur 2', role: 'Manager' },
