@@ -222,22 +222,24 @@ function formaterRapportCoffre(texteBrut) {
         }
     }
 
-    // 5. Construction du message final (DESIGN EXACT)
+    // 5. Construction du message final (AVEC LE GRAS WHATSAPP)
     let header = txt.includes('usd') ? "🔒 *RAPPORT COFFRE DU SOIR*" : "🔒 *RAPPORT COFFRE DU MATIN*";
-    let msg = `${header}\n\n* Statut : ${statut}\n`;
     
-    msg += `* Hormis : ${exceptions.length > 0 ? exceptions.join(', ') : 'Rien'}\n`;
+    // Les étoiles sont collées aux mots pour forcer le gras sur WhatsApp
+    let msg = `${header}\n\n*Statut* : ${statut}\n`;
+    
+    msg += `*Hormis* : ${exceptions.length > 0 ? exceptions.join(', ') : 'Rien'}\n`;
 
     if (ecarts.length > 0) {
-        msg += `* Écarts signalés :\n${ecarts.map(e => `  - ${e}`).join('\n')}\n`;
+        msg += `*Écarts signalés* :\n${ecarts.map(e => `  - ${e}`).join('\n')}\n`;
     }
 
     if (usdStatus) {
-        msg += `* USD : ${usdStatus}\n`;
+        msg += `*USD* : ${usdStatus}\n`;
     }
     
     if (extras.length > 0) {
-        msg += `* Notes Additionnelles :\n${extras.map(e => `  - ${e}`).join('\n')}\n`;
+        msg += `*Notes Additionnelles* :\n${extras.map(e => `  - ${e}`).join('\n')}\n`;
     }
 
     return msg;
