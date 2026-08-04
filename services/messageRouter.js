@@ -936,36 +936,32 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     // 🕵️‍♂️ INTERCEPTEUR TERRAIN ET PÉNALITÉS (WORKFLOWS SPÉCIFIQUES)
     // =================================================================
     
-    // 1️⃣ GROUPE : Rapport PR terrain (Nouveau Kingasani)
+    // 1️⃣ GROUPE : Rapport PR terrain (Transfert GLOBAL, Sauvegarde KINGASANI)
     if (jid === '120363409129431148@g.us') {
         
         // 🛑 On bloque le patron pour éviter de fausser les stats
         if (estPatron) return; 
 
-        // 🛑 NOUVEAU : On exige que l'agent précise "Kingasani"
-        if (!texteNormalise.includes('kingasani') && !texteNormalise.includes('kinga')) {
-            console.log(`🚫 [PR TERRAIN] Rapport de ${expediteur} ignoré (Hors Kingasani).`);
-            return;
-        }
-
-        // 🛑 On vérifie que c'est un vrai rapport d'agent
+        // 🛑 On vérifie que c'est un vrai rapport d'agent (pour éviter de transférer des "bonjour")
         if (!texteNormalise.includes('p.d.v') && !texteNormalise.includes('pdv') && !texteNormalise.includes('ticket')) {
-            console.log(`⚠️ [PR TERRAIN] Message hors-sujet ignoré : ${texteStocke.substring(0, 20)}...`);
             return; 
         }
         
         try {
-            // ✅ On sauvegarde dans la base de données
-            await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
-            
-            // 🚀 On transfère dans le grand groupe Visite Agents
+            // 🚀 1. TRANSFERT GLOBAL : On envoie TOUS les rapports (Masina, DGC, Kingasani...)
             await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
-            
-            // 📢 Confirmation visuelle pour toi dans la console !
-            console.log(`✅ [TRANSFERT RÉUSSI] Le rapport de ${expediteur} a bien été envoyé dans Visite Agents !`);
+            console.log(`✅ [TRANSFERT RÉUSSI] Rapport de ${expediteur} envoyé dans Visite Agents !`);
+
+            // 💾 2. SAUVEGARDE CIBLÉE : On enregistre en DB UNIQUEMENT pour Kingasani
+            if (texteNormalise.includes('kingasani') || texteNormalise.includes('kingas')) {
+                await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
+                console.log(`✅ [DB] Rapport Kingasani sauvegardé pour ${expediteur}.`);
+            } else {
+                console.log(`ℹ️ [DB IGNORÉ] Rapport de ${expediteur} transféré mais non sauvegardé (Hors Kingasani).`);
+            }
             
         } catch (erreur) {
-            console.error(`❌ [ERREUR TRANSFERT] Impossible d'envoyer dans Visite Agents :`, erreur.message);
+            console.error(`❌ [ERREUR PR TERRAIN] :`, erreur.message);
         }
         return;
     }
