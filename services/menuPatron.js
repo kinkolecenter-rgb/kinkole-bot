@@ -67,7 +67,7 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
                 '120363021280044937@g.us': 'Synchro Kinkole',
                 '120363023010071105@g.us': 'Synchro Kinkole pos',
                 '120363025487823123@g.us': 'Winner Shop kinkole',
-                '120363040045715280@g.us': 'Rapport PR terrain',
+                '120363409129431148@g.us': 'Rapport PR terrain',
                 '243907634105-1540987363@g.us': 'Pénalités QS',
                 '243900435187-1521782366@g.us': 'General Management',
                 '243900435187-1564931206@g.us': 'Évacuation Matériels',
