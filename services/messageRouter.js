@@ -936,23 +936,37 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     // 🕵️‍♂️ INTERCEPTEUR TERRAIN ET PÉNALITÉS (WORKFLOWS SPÉCIFIQUES)
     // =================================================================
     
-    // 1️⃣ GROUPE : Rapport PR terrain kinko
+    // 1️⃣ GROUPE : Rapport PR terrain (Nouveau Kingasani)
     if (jid === '120363409129431148@g.us') {
         
-        // (L'extraction USD est maintenant gérée plus haut par l'intercepteur global)
-
-        // 🛑 On bloque le boss/secondaire pour la suite du workflow
+        // 🛑 On bloque le patron pour éviter de fausser les stats
         if (estPatron) return; 
 
-        // 🛑 On vérifie que c'est un vrai rapport d'agent avant de transférer
+        // 🛑 NOUVEAU : On exige que l'agent précise "Kingasani"
+        if (!texteNormalise.includes('kingasani') && !texteNormalise.includes('kinga')) {
+            console.log(`🚫 [PR TERRAIN] Rapport de ${expediteur} ignoré (Hors Kingasani).`);
+            return;
+        }
+
+        // 🛑 On vérifie que c'est un vrai rapport d'agent
         if (!texteNormalise.includes('p.d.v') && !texteNormalise.includes('pdv') && !texteNormalise.includes('ticket')) {
-            console.log(`⚠️ Message ignoré (hors sujet) : ${texteStocke.substring(0, 20)}...`);
+            console.log(`⚠️ [PR TERRAIN] Message hors-sujet ignoré : ${texteStocke.substring(0, 20)}...`);
             return; 
         }
         
-        // ✅ C'est un vrai rapport de visite, on sauvegarde
-        await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
-        await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
+        try {
+            // ✅ On sauvegarde dans la base de données
+            await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Rapport PR');
+            
+            // 🚀 On transfère dans le grand groupe Visite Agents
+            await sock.sendMessage('243900435187-1578719495@g.us', { text: texteStocke });
+            
+            // 📢 Confirmation visuelle pour toi dans la console !
+            console.log(`✅ [TRANSFERT RÉUSSI] Le rapport de ${expediteur} a bien été envoyé dans Visite Agents !`);
+            
+        } catch (erreur) {
+            console.error(`❌ [ERREUR TRANSFERT] Impossible d'envoyer dans Visite Agents :`, erreur.message);
+        }
         return;
     }
     
