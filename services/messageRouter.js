@@ -30,7 +30,7 @@ const NOMS_GROUPES = {
     '243906226846-1565006518@g.us': 'Synchro Kingasani',
     '120363023010071105@g.us': 'Synchro Kinkole pos',
     '120363025487823123@g.us': 'Winner Shop kinkole',
-    '120363040045715280@g.us': 'Rapport PR terrain kinko',
+    '120363409129431148@g.us': 'Rapport PR terrain kinko',
     '243907634105-1540987363@g.us': 'PENALITy QS all shop',
     '243900435187-1521782366@g.us': 'General Management',
     '243900435187-1564931206@g.us': 'Évacuation Matériels shop',
@@ -401,7 +401,7 @@ async function handleIncomingMessage(sock, { messages, type }, memoire, assistan
         ];
         
         const estMessagePriveAutorise = !jid.includes('@g.us') && identifiantsAutorises.includes(idBrut);
-        const estGroupePRTerrain = (jid === '120363040045715280@g.us');
+        const estGroupePRTerrain = (jid === '120363409129431148@g.us');
 
         const contientAlerteUSD = texteMessage.toUpperCase().includes('USD') || 
                                   texteMessage.includes('$') || 
@@ -576,7 +576,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     // 🟢 On définit les groupes "Ouverts" où les agents de terrain ont le droit de parler
     const estGroupeOuvert = (
         estDansSynchro || 
-        jid === '120363040045715280@g.us' ||      // Rapport PR terrain
+        jid === '120363409129431148@g.us' ||      // Rapport PR terrain
         jid === '243900435187-1578719495@g.us' || // Agent Visité
         jid === '243907634105-1540987363@g.us'    // Pénalités
     );
@@ -937,7 +937,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     // =================================================================
     
     // 1️⃣ GROUPE : Rapport PR terrain kinko
-    if (jid === '120363040045715280@g.us') {
+    if (jid === '120363409129431148@g.us') {
         
         // (L'extraction USD est maintenant gérée plus haut par l'intercepteur global)
 
