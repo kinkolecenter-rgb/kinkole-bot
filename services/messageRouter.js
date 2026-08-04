@@ -612,10 +612,10 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     
     let doitSauvegarder = true;
 
-    // Si le message vient de ces deux groupes précis, on exige "Kinkole"
+    // Si le message vient de ces deux groupes précis, on exige "Kingasani"
     if (estGroupeVisiteAllShop || estGroupePenaliteAllShop) {
-        if (!texteNormalise.includes('kinkole') && !texteNormalise.includes('kinko')) {
-            doitSauvegarder = false; // On bloque TOUT pour Mateté, DGC, etc.
+        if (!texteNormalise.includes('kingasani') && !texteNormalise.includes('kinga')) {
+            doitSauvegarder = false; // On bloque TOUT pour Kinkole, Mateté, DGC, etc.
         }
     }
 
@@ -639,9 +639,9 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         await gestionnaireManagers.enregistrerActivite(participantJid, messageAnalyse);
         
     } else {
-        console.log(`🚫 [FILTRE GLOBAL] Message de ${expediteur} ignoré (Hors Kinkole).`);
+        console.log(`🚫 [FILTRE GLOBAL] Message de ${expediteur} ignoré (Hors Kingasani).`);
     }
-
+    
     const heureActuelle = new Date().getHours();
 
     
@@ -960,7 +960,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     if (jid === '243900435187-1578719495@g.us') { 
         if (estPatron) return; 
         
-        if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
+        if (texteNormalise.includes('kingasani') || texteNormalise.includes('kingas')) {
             await db.sauvegarderVisiteTerrain(participantJid, texteStocke, 'Agent Visité');
         }
         return;
@@ -968,7 +968,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
 
     // 3️⃣ GROUPE : PENALITy QS all shop
     if (jid === '243907634105-1540987363@g.us') {
-        if (texteNormalise.includes('kinkole') || texteNormalise.includes('kinko')) {
+        if (texteNormalise.includes('kingasani') || texteNormalise.includes('kingas')) {
             await db.sauvegarderPenalite(participantJid, texteStocke);
         }
         return;
