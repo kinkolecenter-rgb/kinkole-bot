@@ -629,7 +629,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             }
         }
 
-    // ==========================================
+   // ==========================================
     // 👁️ CHANTIER 3 : L'ŒIL DE LYNX (Validation des Médias)
     // ==========================================
     if (estDansSynchro || jid === '243900435187-1578719495@g.us') {
@@ -661,16 +661,39 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             await sock.sendMessage(jid, { text: msgCallMe, mentions: [participantJid] });
             // Ici, on laisse passer le message dans le système
         }
-
-        
+    } // <-- C'est cette accolade qui manquait pour fermer le Chantier 3 !
 
     // ==========================================
-        // 🧑‍💼 CHANTIER 4 : L'ANALYSTE RH & TECHNIQUE
-        // ==========================================
-        
+    // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
+    // ==========================================
+    // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
+    if (estDansSynchro && !estPatron) {
+        const demandeApprobation = (
+            (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('sortie') || texteNormalise.includes('t-shirt'))) ||
+            texteNormalise.includes('sanction') ||
+            texteNormalise.includes('shift') ||
+            texteNormalise.includes('dépense') ||
+            texteNormalise.includes('depense')
+        );
+
+        if (demandeApprobation) {
+            const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
+            const msgBlocage = await agentDialogueManager(sujet, expediteur);
+            await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+            
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+            });
+            return;
+        }
+    }
+
+    // ==========================================
+    // 🧑‍💼 CHANTIER 4 : L'ANALYSTE RH & TECHNIQUE
+    // ==========================================
+    if (estDansSynchro) {
         // 🚨 4A : Traque des Pannes Matérielles (Point 7)
         if (texteNormalise.includes('panne') || texteNormalise.includes('problème') || texteNormalise.includes('probleme') || texteNormalise.includes('ne marche pas')) {
-            // Le bot laisse passer le message dans le groupe, mais t'envoie un Flash discret en privé
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
                 text: `🚨 *FLASH TECHNIQUE* 🚨\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Signalement :*\n"${texteBrut}"\n\n👉 J'ai détecté un potentiel problème matériel sur le terrain (Point 7).`
             });
@@ -679,20 +702,17 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         // 👥 4B : Traque des Absences sans justification (Point 2)
         if (texteNormalise.includes('rapport pos') || texteNormalise.includes('pos')) {
             if (texteNormalise.includes('absent') || texteNormalise.includes('manquant') || texteNormalise.includes('absence')) {
-                
-                // On vérifie si le manager a donné un début d'explication
                 const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé'];
                 const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
                 
                 if (!aUneJustification) {
-                    // 🧠 L'IA interpelle le manager publiquement
                     const sujet = `Le manager @${expediteur} vient de signaler une absence dans son rapport POS, mais n'a donné AUCUNE RAISON. Rappelle-lui que le Point 2 du règlement exige de spécifier les raisons des absences, et demande-lui poliment mais fermement de justifier.`;
-                    
                     const msgRappel = await agentDialogueManager(sujet, expediteur);
                     await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
                 }
             }
         }
+    }
 
     // Fix 4 : analyser le message AVANT de sauvegarder pour enrichir avec catégorie/priorité
     const messageBase = {
