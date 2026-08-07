@@ -596,6 +596,10 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
 
     if (!texteBrut && !estMedia) return; 
 
+    // ⚠️ CORRECTION : On calcule texteNormalise ICI, avant que l'Oeil de Lynx ne s'en serve !
+    const texteNormalise = (texteBrut || '').toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+    console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texteNormalise.substring(0, 50)}...`);
+
     // ==========================================
     // 👁️ CHANTIER 3 : L'ŒIL DE LYNX (Validation des Médias)
     // ==========================================
@@ -658,10 +662,6 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             }
         }
     }
-    if (!texteBrut) return; 
-
-    const texteNormalise = texteBrut.toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
-    console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texteNormalise.substring(0, 50)}...`);
 
     // Fix 4 : analyser le message AVANT de sauvegarder pour enrichir avec catégorie/priorité
     const messageBase = {
@@ -670,7 +670,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         texte: texteStocke, estMedia, timestamp: Date.now()
     };
     const messageAnalyse = analyserMessage(messageBase);
-
+    
     // ==========================================
     // 🛑 FILTRE ANTI-POLLUTION (REDIS + DB + STATS)
     // ==========================================
