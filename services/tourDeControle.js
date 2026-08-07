@@ -6,12 +6,13 @@ const { agentDialogueManager } = require('./agents'); // 🧠 Importation du cer
 const GROUPE_SYNCHRO  = '243906226846-1565006518@g.us';
 const GROUPE_DISPARUS = '243900435187-1564716535@g.us';
 
-// Importé depuis messageRouter pour activer l'état d'attente
+// Importé depuis messageRouter pour activer l'état d'attente après la question de 23h
 let etatAttente = null;
 let memoireRef = null;
 let redisClient = null;
 function setEtatAttente(ref) { etatAttente = ref; }
 
+// utilitaire pour tronquer les messages trop longs
 function tronquer(texte, max = 60000) {
     if (texte.length <= max) return texte;
     return texte.substring(0, max) + '\n\n_[Message tronqué — trop long]_';
@@ -21,71 +22,98 @@ function initialiserTourDeControle(sock, etatAttenteRef, memoire, redisClientRef
     etatAttente = etatAttenteRef;
     memoireRef = memoire;
     redisClient = redisClientRef || null;
-    console.log("🗼 Tour de Contrôle IA activée. Le Bot-Manager surveille Kingasani avec 30 min de marge...");
+    console.log("🗼 Tour de Contrôle IA activée. Alertes configurées EXCLUSIVEMENT sur Synchro Kingasani...");
 
     const optionsCron = { timezone: 'Africa/Kinshasa' };
 
-    // ==========================================
-    // ⏰ 1. RAPPEL D'OUVERTURE (08h30 - Marge de 30 min)
-    // ==========================================
+    // 1. Rappel Ouverture (08h30 - Marge de 30min)
     cron.schedule('30 8 * * *', async () => {
-        verifierEtRappeler(sock, 'ouverture', "le rapport d'ouverture", GROUPE_SYNCHRO);
-    });
+        verifierEtRappeler(sock, 'ouverture', "d'Ouverture", GROUPE_SYNCHRO);
+    }, optionsCron);
 
-    // ==========================================
-    // ⏰ 2. RAPPEL POS & VIDÉO CHARGING ROOM (10h30)
-    // ==========================================
+    // 2. Rappel POS & Charging Room (10h30)
     cron.schedule('30 10 * * *', async () => {
-        verifierEtRappeler(sock, 'pos', "le rapport des POS (avec les raisons des absences)", GROUPE_SYNCHRO);
-        setTimeout(() => {
-            verifierEtRappeler(sock, 'video_charging', "la vidéo du charging room", GROUPE_SYNCHRO);
-        }, 30000); // 30 sec d'écart pour ne pas spammer
-    });
+        verifierEtRappeler(sock, 'pos', "des POS (et les raisons d'absences)", GROUPE_SYNCHRO);
+        setTimeout(() => verifierEtRappeler(sock, 'video_charging', "la vidéo du charging room", GROUPE_SYNCHRO), 30000);
+    }, optionsCron);
 
-    // ==========================================
-    // ⏰ 3. RAPPELS ÉTATS ACTUELS (09h30, 11h30, 13h30, 15h30, 17h30)
-    // ==========================================
+    // 3. Rappels États Actuels (09h30, 11h30, 13h30, 15h30, 17h30)
     const heuresEtats = [9, 11, 13, 15, 17];
     heuresEtats.forEach(h => {
         cron.schedule(`30 ${h} * * *`, async () => {
-            verifierEtRappeler(sock, 'etat_actuel', `le rapport d'état actuel de ${h}h00`, GROUPE_SYNCHRO);
-        });
+            verifierEtatActuel(sock, h, `d'État Actuel de ${h}h00`, GROUPE_SYNCHRO);
+        }, optionsCron);
     });
 
-    // ==========================================
-    // ⏰ 4. RAPPELS DÉTAILS CONNEXION (12h30, 15h30, 17h30)
-    // ==========================================
-    cron.schedule('30 12 * * *', async () => verifierRappelConnexion(sock, 12, "les détails de connexion de 12h", GROUPE_SYNCHRO));
-    cron.schedule('30 15 * * *', async () => verifierRappelConnexion(sock, 15, "les détails de connexion de 15h", GROUPE_SYNCHRO));
-    cron.schedule('30 17 * * *', async () => verifierRappelConnexion(sock, 17, "les détails de connexion de 17h", GROUPE_SYNCHRO));
+    // 4. Rappel Connexion (12h30, 15h30, 17h30)
+    cron.schedule('30 12 * * *', async () => verifierRappelConnexion(sock, 12, "des Détails Connexion 12h", GROUPE_SYNCHRO), optionsCron);
+    cron.schedule('30 15 * * *', async () => verifierRappelConnexion(sock, 15, "des Détails Connexion 15h", GROUPE_SYNCHRO), optionsCron);
+    cron.schedule('30 17 * * *', async () => verifierRappelConnexion(sock, 17, "des Détails Connexion 17h", GROUPE_SYNCHRO), optionsCron);
     
-    // ==========================================
-    // ⏰ 5. RAPPEL FERMETURE & STOCKS (22h30)
-    // ==========================================
+    // 5. Rappel Fermeture & Stocks (22h30)
     cron.schedule('30 22 * * *', async () => {
-        verifierEtRappeler(sock, 'fermeture', "le rapport de fermeture ET l'état des stocks", GROUPE_SYNCHRO);
-    });
+        verifierEtRappeler(sock, 'fermeture', "de Fermeture (et l'état des stocks)", GROUPE_SYNCHRO);
+    }, optionsCron);
 
     // ==========================================
     // 🚨 6. RAPPELS INCIDENTS EN COURS (10h30, 16h30 et 22h45)
     // ==========================================
-    cron.schedule('30 10 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO));
-    cron.schedule('30 16 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO));
-    cron.schedule('45 22 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO));
+    cron.schedule('30 10 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO), optionsCron);
+    cron.schedule('30 16 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO), optionsCron);
+    cron.schedule('45 22 * * *', async () => rappelerIncidentsActifs(sock, GROUPE_SYNCHRO), optionsCron);
 
     // ==========================================
     // 🛑 7. VÉRIFICATION CLÔTURE QUOTIDIENNE (23h00)
     // ==========================================
-    cron.schedule('0 23 * * *', async () => verificationClotureQuotidienne(sock, GROUPE_SYNCHRO));
+    cron.schedule('0 23 * * *', async () => verificationClotureQuotidienne(sock, GROUPE_SYNCHRO), optionsCron);
 
     // ==========================================
     // 👤 8. ESCALADE DIRECTE AU PATRON (23h59)
     // ==========================================
-    cron.schedule('59 23 * * *', async () => alertePatronSilencieux(sock));
+    cron.schedule('59 23 * * *', async () => alertePatronSilencieux(sock), optionsCron);
 }
 
 /**
- * Vérifie la DB et envoie un rappel IA si le rapport n'a pas été reçu
+ * Utilitaire pour récupérer les responsables SANS le mot "Inconnu"
+ */
+async function getManagersActifsNoms() {
+    let responsable = "l'équipe";
+    try {
+        const heureActuelle = new Date().getHours();
+        const debutService = new Date();
+        if (heureActuelle < 14) {
+            debutService.setHours(6, 0, 0, 0);
+        } else {
+            debutService.setHours(16, 0, 0, 0);
+        }
+        
+        const messagesService = await db.prisma.message.findMany({
+            where: { groupeJid: GROUPE_SYNCHRO, timestamp: { gte: debutService, lte: new Date() } },
+            select: { senderJid: true },
+            distinct: ['senderJid']
+        });
+
+        if (messagesService && messagesService.length > 0) {
+            const jidsEnService = messagesService.map(m => m.senderJid);
+            const managersActifs = await db.prisma.manager.findMany({
+                where: { jid: { in: jidsEnService } },
+                select: { nom: true }
+            });
+
+            // On filtre pour enlever "Inconnu"
+            const nomsPropres = managersActifs.map(m => m.nom).filter(n => n && !n.toLowerCase().includes('inconnu'));
+            if (nomsPropres.length > 0) {
+                responsable = nomsPropres.join(' et ');
+            }
+        }
+    } catch (e) {
+        console.error('⚠️ Erreur filtrage managers:', e.message);
+    }
+    return responsable;
+}
+
+/**
+ * Vérifie la DB et envoie un rappel si le rapport n'a pas été reçu aujourd'hui
  */
 async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
     try {
@@ -93,39 +121,15 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         const rapportsDuJour = await db.getReportsAujourdhui(typeRapport);
 
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
-            let responsable = "l'équipe"; // Par défaut
-            try {
-                // Recherche des managers actifs pour personnaliser le message
-                const heureActuelle = new Date().getHours();
-                const debutService = new Date();
-                if (heureActuelle < 14) debutService.setHours(6, 0, 0, 0);
-                else debutService.setHours(16, 0, 0, 0);
-                
-                const messagesService = await db.prisma.message.findMany({
-                    where: { groupeJid: GROUPE_SYNCHRO, timestamp: { gte: debutService, lte: new Date() } },
-                    select: { senderJid: true },
-                    distinct: ['senderJid']
-                });
+            const responsable = await getManagersActifsNoms();
 
-                if (messagesService && messagesService.length > 0) {
-                    const jidsEnService = messagesService.map(m => m.senderJid);
-                    const managersActifs = await db.prisma.manager.findMany({
-                        where: { jid: { in: jidsEnService } },
-                        select: { nom: true }
-                    });
-                    if (managersActifs && managersActifs.length > 0) {
-                        responsable = managersActifs.map(m => m.nom).join(' et ');
-                    }
-                }
-            } catch (e) { console.error('⚠️ Erreur filtrage managers:', e.message); }
-
-            // 🧠 GÉNÉRATION DU MESSAGE PAR L'IA
-            const sujet = `Le rapport "${nomRapport}" est en retard. Demande-leur de l'envoyer immédiatement, car c'est obligatoire dans la gestion journalière.`;
+            // 🧠 Message naturel via IA au lieu du texte codé en dur
+            const sujet = `Le rapport ${nomRapport} est en retard. Relance-les poliment mais fermement pour qu'ils l'envoient immédiatement.`;
             const messageAlerte = await agentDialogueManager(sujet, responsable);
-
+            
             await sock.sendMessage(groupeId, { text: messageAlerte });
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Retard signalé* : L'IA vient de relancer ${responsable} pour ${nomRapport}.` 
+                text: `🚨 *Rapport Manquant* : L'IA a réclamé ${nomRapport} à ${responsable}.` 
             });
         } else {
             console.log(`✅ Rapport [${typeRapport}] reçu aujourd'hui. Aucun rappel.`);
@@ -136,7 +140,62 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
 }
 
 /**
- * Rappels ciblés et groupés via IA
+ * Vérification des 5 rapports d'État Actuel par compteur
+ */
+async function verifierEtatActuel(sock, heureCible, nomRapport, groupeId) {
+    try {
+        const rapports = await db.getReportsAujourdhui('etat_actuel');
+        const nombreTotalAujourdhui = rapports ? rapports.length : 0;
+
+        let objectifRapports = 1;
+        if (heureCible === 11) objectifRapports = 2;
+        if (heureCible === 13) objectifRapports = 3;
+        if (heureCible === 15) objectifRapports = 4;
+        if (heureCible === 17) objectifRapports = 5;
+
+        if (nombreTotalAujourdhui < objectifRapports) {
+            const responsable = await getManagersActifsNoms();
+            const sujet = `Le rapport ${nomRapport} est en retard (on en a reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment pour qu'ils l'envoient.`;
+            const messageAlerte = await agentDialogueManager(sujet, responsable);
+            
+            await sock.sendMessage(groupeId, { text: messageAlerte });
+        }
+    } catch (error) {}
+}
+
+/**
+ * Vérification rapports connexion par compteur
+ */
+async function verifierRappelConnexion(sock, heureCible, nomRapport, groupeId) {
+    try {
+        console.log(`🔍 Vérification par compteur [${nomRapport}]...`);
+        const rapports = await db.getReportsAujourdhui('details_connexion');
+        const nombreTotalAujourdhui = rapports ? rapports.length : 0;
+
+        let objectifRapports = 1;
+        if (heureCible === 12) objectifRapports = 1;
+        if (heureCible === 15) objectifRapports = 2;
+        if (heureCible === 17) objectifRapports = 3;
+
+        if (nombreTotalAujourdhui < objectifRapports) {
+            const responsable = await getManagersActifsNoms();
+            const sujet = `Le rapport de ${nomRapport} est en retard (reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment mais fermement.`;
+            const messageAlerte = await agentDialogueManager(sujet, responsable);
+
+            await sock.sendMessage(groupeId, { text: messageAlerte });
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
+                text: `🚨 *Rapport Manquant* : ${nomRapport} en retard (${nombreTotalAujourdhui}/${objectifRapports}).` 
+            });
+        } else {
+            console.log(`✅ Objectif atteint : ${nombreTotalAujourdhui} rapport(s). Aucun retard.`);
+        }
+    } catch (error) {
+        console.error(`❌ Erreur Tour de Contrôle [${nomRapport}]:`, error.message);
+    }
+}
+
+/**
+ * Rappels ciblés et groupés (Via IA + Format Forcé)
  */
 async function rappelerIncidentsActifs(sock, groupeId) {
     try {
@@ -144,13 +203,14 @@ async function rappelerIncidentsActifs(sock, groupeId) {
         if (!incidents || incidents.length === 0) return;
 
         const listeIds = [...new Set(incidents.map(inc => inc.machineId))];
-        
-        // 🧠 Demande à l'IA de formuler la relance
-        const sujet = `Il reste ${listeIds.length} machine(s) non-clôturées depuis hier (IDs: ${listeIds.join(', ')}). Demande-leur de répondre avec le modèle "ID résolu" ou "ID non résolu" pour mettre à jour la base de données.`;
+
+        const sujet = `Il reste ${listeIds.length} machine(s) en anomalie (IDs: ${listeIds.join(', ')}). Demande-leur de répondre avec le modèle de mise à jour pour clôturer les statuts.`;
         let msgRelance = await agentDialogueManager(sujet, "l'équipe");
-        
-        // On force le modèle à la fin pour être sûr qu'ils répondent bien
-        msgRelance += `\n\n📝 *Rappel du modèle attendu :*\n${listeIds[0]} résolu`;
+
+        // On force le modèle à la fin pour sécuriser la BDD
+        msgRelance += `\n\n🤖 *Action requise - Modèle de réponse :*\n\`\`\`\nNon clôturé\n`;
+        listeIds.forEach(id => { msgRelance += `${id} résolu\n`; });
+        msgRelance += `\`\`\``;
 
         await sock.sendMessage(groupeId, { text: msgRelance });
 
@@ -163,24 +223,25 @@ async function rappelerIncidentsActifs(sock, groupeId) {
 }
 
 /**
- * 🛑 Vérification clôture à 23h00 pile (Reste strict pour le format)
+ * 🛑 Vérification clôture à 23h00 pile
  */
 async function verificationClotureQuotidienne(sock, groupeId) {
     try {
         const rapportsDuJour = await db.getReportsAujourdhui('incident_cloture');
-        if (rapportsDuJour && rapportsDuJour.length > 0) return;
+        if (rapportsDuJour && rapportsDuJour.length > 0) {
+            console.log(`✅ 23h00 : Rapport de clôture déjà reçu. Bot silencieux.`);
+            return;
+        }
 
         const incidents = await db.getIncidentsNonResolus();
         if (incidents && incidents.length > 0) {
             const idsConcernes = [...new Set(incidents.map(inc => inc.machineId))].join(', ');
-            
-            const sujet = `C'est l'heure du bilan de fin de journée (23h00). Les machines ${idsConcernes} sont toujours signalées non-clôturées. Demande-leur de donner l'état final.`;
-            const msgBilan = await agentDialogueManager(sujet, "l'équipe");
+            const msgBilan = `⚠️ *BILAN DE FIN DE JOURNÉE (23h00)* ⚠️\n\nLes machines suivantes sont toujours signalées non-clôturées : *${idsConcernes}*.\n\n👉 Quel est l'état final ?\n• Répondez *ID résolu* pour chaque machine clôturée\n• Ou signalez si la situation persiste`;
             await sock.sendMessage(groupeId, { text: msgBilan });
             return;
         }
 
-        const msgVerif = `⚠️ *VÉRIFICATION QUOTIDIENNE DE CLÔTURE (23h00)* ⚠️\n\nBonsoir l'équipe.\nEst-ce que tout le monde a clôturé aujourd'hui ?\n\n👉 Si oui : répondez *"Tout est ok"*\n👉 Si non : envoyez la liste selon ce modèle :\n\nNon clôturé\n421596 = 150000\n1363049 = 75000`;
+        const msgVerif = `⚠️ *VÉRIFICATION QUOTIDIENNE DE CLÔTURE (23h00)* ⚠️\n\nBonsoir cher manager.\nEst-ce que tout le monde a clôturé aujourd'hui ?\n\n👉 Si oui : répondez *"Tout est ok"*\n👉 Si non : envoyez la liste selon ce modèle :\n\nNon clôturé\n421596 = 150000\n1363049 = 75000`;
         await sock.sendMessage(groupeId, { text: msgVerif });
 
         if (etatAttente) {
@@ -190,8 +251,9 @@ async function verificationClotureQuotidienne(sock, groupeId) {
                     const data = {};
                     for (const [jid, etat] of etatAttente.entries()) data[jid] = etat;
                     await redisClient.set('etat_attente_synchro', JSON.stringify(data), 'EX', 7200);
-                } catch (e) {}
+                } catch (e) { console.error('⚠️ Erreur sauvegarde Redis etatAttente:', e.message); }
             }
+            console.log(`🟡 État d'attente activé dans Synchro Kinkole après question 23h.`);
         }
     } catch (error) {
         console.error(`❌ Erreur vérification clôture 23h :`, error.message);
@@ -205,39 +267,14 @@ async function alertePatronSilencieux(sock) {
     try {
         const rapportsDuJour = await db.getReportsAujourdhui('incident_cloture');
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
-            const msgAlerte = `🚨 *ALERTE ROUGE - CLÔTURE INCONNUE* 🚨\n\nBoss, l'équipe n'a jamais répondu à la vérification de clôture de 23h00. Le statut final de la journée n'est pas validé.`;
+            const msgAlerte = `🚨 *ALERTE ROUGE - CLÔTURE INCONNUE* 🚨\n\nBoss, l'équipe n'a jamais répondu à la vérification de clôture de 23h00.\n\nLe statut final de la journée n'est pas validé.`;
             await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { text: msgAlerte });
+            console.log(`🚨 Escalade envoyée au Boss : Clôture non validée.`);
+        } else {
+            console.log(`✅ Fin de journée validée. Pas d'alerte patron.`);
         }
     } catch (error) {
         console.error(`❌ Erreur escalade patron 23h59 :`, error.message);
-    }
-}
-
-/**
- * Vérification rapports connexion par compteur
- */
-async function verifierRappelConnexion(sock, heureCible, nomRapport, groupeId) {
-    try {
-        const rapports = await db.getReportsAujourdhui('details_connexion');
-        const nombreTotalAujourdhui = rapports ? rapports.length : 0;
-
-        let objectifRapports = 1;
-        if (heureCible === 12) objectifRapports = 1;
-        if (heureCible === 15) objectifRapports = 2;
-        if (heureCible === 17) objectifRapports = 3;
-
-        if (nombreTotalAujourdhui < objectifRapports) {
-            // 🧠 Message naturel via IA
-            const sujet = `Le rapport de ${nomRapport} est en retard (on en a reçu ${nombreTotalAujourdhui} sur ${objectifRapports} attendus). Relance-les poliment mais fermement pour qu'ils l'envoient tout de suite.`;
-            const messageAlerte = await agentDialogueManager(sujet, "l'équipe");
-
-            await sock.sendMessage(groupeId, { text: messageAlerte });
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Retard signalé* : L'IA vient de réclamer ${nomRapport}.` 
-            });
-        }
-    } catch (error) {
-        console.error(`❌ Erreur Tour de Contrôle [${nomRapport}]:`, error.message);
     }
 }
 
