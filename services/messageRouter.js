@@ -1052,7 +1052,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     }
     // =================================================================
 
-    // ── DÉTECTION DES AUTRES RAPPORTS STANDARDS (OUVERTURE, FIXTURE...) ──
+    /// ── DÉTECTION DES AUTRES RAPPORTS STANDARDS (OUVERTURE, FIXTURE...) ──
     const estProbablementRapport = (
         texteNormalise.includes('ouverture du') ||
         texteNormalise.includes('bonjour team') ||
@@ -1069,6 +1069,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         texteNormalise.includes('rapport reste caution') ||
         texteNormalise.includes('état d activités') ||
         texteNormalise.includes('etat d activites') ||
+        texteNormalise.includes('rapport actuel') || // 👈 NOUVEAU SYNONYME
+        texteNormalise.includes('etat actuel') ||    // 👈 NOUVEAU SYNONYME
         texteNormalise.includes('etat materiel') ||
         texteNormalise.includes('taux de change') ||
         texteNormalise.includes('taux') ||
@@ -1078,6 +1080,10 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     if (estProbablementRapport) {
         const analyseLocale = analyserRapport(texteBrut); 
         let typeLocal = analyseLocale.type;
+        // 🧠 FORÇAGE : Si c'est le rapport de 9h, 11h, etc., on l'oblige à le classer comme "etat_actuel"
+        if (texteNormalise.includes('rapport actuel') || texteNormalise.includes('etat actuel')) {
+            typeLocal = 'etat_actuel';
+        }
         let iaType = "Non consultée";
         
         if (typeLocal === 'inconnu') {
