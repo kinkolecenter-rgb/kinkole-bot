@@ -700,13 +700,27 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         }
 
         // 👥 4B : Traque des Absences sans justification (Point 2)
-        if (texteNormalise.includes('rapport pos') || texteNormalise.includes('pos')) {
-            if (texteNormalise.includes('absent') || texteNormalise.includes('manquant') || texteNormalise.includes('absence')) {
+        // On exige des mots plus précis pour être sûr que c'est le vrai Rapport POS
+        if (texteNormalise.includes('rapport pos') || texteNormalise.includes('pos en charge')) {
+            
+            const parleAbsence = texteNormalise.includes('absent') || texteNormalise.includes('manquant') || texteNormalise.includes('absence');
+            
+            // 🧠 NOUVEAU : Le bot pardonne si c'est un zéro !
+            const zeroAbsence = texteNormalise.includes('absence : 0') || texteNormalise.includes('absence :0') || 
+                                texteNormalise.includes('0 absence') || texteNormalise.includes('absent : 0') || 
+                                texteNormalise.includes('absence :00') || texteNormalise.includes("d'absence :00") ||
+                                texteNormalise.includes('absences : 0');
+
+            if (parleAbsence && !zeroAbsence) {
+                
+                // On vérifie si le manager a donné un début d'explication
                 const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé'];
                 const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
                 
                 if (!aUneJustification) {
+                    // 🧠 L'IA interpelle le manager publiquement
                     const sujet = `Le manager @${expediteur} vient de signaler une absence dans son rapport POS, mais n'a donné AUCUNE RAISON. Rappelle-lui que le Point 2 du règlement exige de spécifier les raisons des absences, et demande-lui poliment mais fermement de justifier.`;
+                    
                     const msgRappel = await agentDialogueManager(sujet, expediteur);
                     await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
                 }
