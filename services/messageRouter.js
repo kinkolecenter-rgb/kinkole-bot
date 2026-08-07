@@ -601,6 +601,35 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     console.log(`📌 EXPEDITEUR | JID: ${participantJid} | Nom: ${expediteur} | Texte: ${texteNormalise.substring(0, 50)}...`);
 
     // ==========================================
+        // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
+        // ==========================================
+        // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
+        if (estDansSynchro && !estPatron) {
+            const demandeApprobation = (
+                (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('sortie') || texteNormalise.includes('t-shirt'))) ||
+                texteNormalise.includes('sanction') ||
+                texteNormalise.includes('shift') ||
+                texteNormalise.includes('dépense') ||
+                texteNormalise.includes('depense')
+            );
+
+            if (demandeApprobation) {
+                // 🧠 L'IA parle EN TON NOM (La Direction)
+                const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
+                
+                const msgBlocage = await agentDialogueManager(sujet, expediteur);
+                await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+                
+                // 🚨 Escalade silencieuse vers toi en privé pour que tu sois alerté
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                    text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+                });
+                
+                return; // 🛑 On arrête la lecture ici
+            }
+        }
+
+    // ==========================================
     // 👁️ CHANTIER 3 : L'ŒIL DE LYNX (Validation des Médias)
     // ==========================================
     if (estDansSynchro || jid === '243900435187-1578719495@g.us') {
