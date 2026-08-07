@@ -341,13 +341,15 @@ async function agentRecommandations(messages, historique = [], etatTwin = null) 
 
 // ── Agent Dialogue Manager (Le communicateur naturel) ────────────────────────
 async function agentDialogueManager(sujet, nomManager, historique = []) {
-    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au manager @${nomManager} de la part de la direction.
+    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au manager @${nomManager}.
     
 Sujet de l'intervention : ${sujet}
 
 Règles pour ce message :
-- Parle de manière conversationnelle, comme le Boss.
-- Sois ferme mais poli.
+- Tu ES le patron (Boss). Parle directement en ton nom à la première personne ("je"). Ne dis JAMAIS "de la part de la direction".
+- Commence TOUJOURS le message par un complément respectueux, par exemple "Cher @${nomManager}," ou "Bonjour cher @${nomManager},".
+- Parle de manière conversationnelle, fluide et humaine.
+- Sois ferme mais poli et respectueux.
 - Demande une action claire ou une réponse du manager.
 - N'utilise pas de format de rapport formel, juste un message WhatsApp naturel.`;
 
@@ -358,9 +360,10 @@ Règles pour ce message :
     );
     
     // Fallback de sécurité si l'IA est indisponible
-    if (!reponse) return `⚠️ @${nomManager}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
+    if (!reponse) return `⚠️ Cher @${nomManager}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
     return reponse;
 }
+
 
 module.exports = {
     agentIntention,
