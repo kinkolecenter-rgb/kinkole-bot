@@ -628,6 +628,35 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
             await sock.sendMessage(jid, { text: msgCallMe, mentions: [participantJid] });
             // Ici, on laisse passer le message dans le système
         }
+
+        // ==========================================
+        // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
+        // ==========================================
+        // On ne bloque pas si c'est toi-même (le Boss) qui écrit !
+        if (!estPatron) {
+            const demandeApprobation = (
+                (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('sortie') || texteNormalise.includes('t-shirt'))) ||
+                texteNormalise.includes('sanction') ||
+                texteNormalise.includes('shift') ||
+                texteNormalise.includes('dépense') ||
+                texteNormalise.includes('depense')
+            );
+
+            if (demandeApprobation) {
+                // 🧠 L'IA parle EN TON NOM (La Direction)
+                const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
+                
+                const msgBlocage = await agentDialogueManager(sujet, expediteur);
+                await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+                
+                // 🚨 Escalade silencieuse vers toi en privé pour que tu sois alerté
+                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                    text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+                });
+                
+                return; // 🛑 On arrête la lecture ici pour ne pas sauvegarder ça comme un simple rapport normal
+            }
+        }
     }
     if (!texteBrut) return; 
 
