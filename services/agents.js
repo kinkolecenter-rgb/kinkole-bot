@@ -30,6 +30,11 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
 - Collecte : ramassage des recettes
 - Coffre : sécurisation des fonds
 - Rapport matin/soir : bilan opérationnel
+- POS (avec raisons absences) : avant 10h00
+- États actuels : 09h, 11h, 13h, 15h, 17h
+- Détails connexion : 12h, 15h, 17h
+- Fermeture & Stocks : chaque soir
+- TOUTE demande (argent, matériel, sanction, shift) DOIT être approuvée avant exécution.
 
 ## Matériel surveillé
 - POS : terminaux de jeux | Flybox : connexion internet
@@ -52,6 +57,8 @@ ADAPTE ton format à la question posée. Pas de structure rigide pour chaque ré
    - Demande de bilan → format structuré avec émojis
    - Demande de chiffres → liste concise
    - Demande d'action → recommandation directe
+   - Au Boss : Bilan structuré.
+   - Au Manager : Message WhatsApp naturel, direct et conversationnel.
 7. Maximum 500 mots.
 8. Distinguer incident ouvert vs résolu.
 9. Utilise l'historique de conversation pour répondre avec cohérence.
@@ -332,6 +339,29 @@ async function agentRecommandations(messages, historique = [], etatTwin = null) 
     return reponse;
 }
 
+// ── Agent Dialogue Manager (Le communicateur naturel) ────────────────────────
+async function agentDialogueManager(sujet, nomManager, historique = []) {
+    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au manager @${nomManager} de la part de la direction.
+    
+Sujet de l'intervention : ${sujet}
+
+Règles pour ce message :
+- Parle de manière conversationnelle, comme le Boss.
+- Sois ferme mais poli.
+- Demande une action claire ou une réponse du manager.
+- N'utilise pas de format de rapport formel, juste un message WhatsApp naturel.`;
+
+    const reponse = await appelerIA(
+        SYSTEM_WINNER_BET,
+        [{ role: 'user', content: prompt }],
+        historique
+    );
+    
+    // Fallback de sécurité si l'IA est indisponible
+    if (!reponse) return `⚠️ @${nomManager}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
+    return reponse;
+}
+
 module.exports = {
     agentIntention,
     agentBrief,
@@ -342,5 +372,6 @@ module.exports = {
     agentProfilManager,
     agentAnomalies,
     agentRecherche,
-    agentRecommandations
+    agentRecommandations,
+   agentDialogueManager
 };
