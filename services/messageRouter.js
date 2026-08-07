@@ -5,6 +5,7 @@ const db = require('./database');
 const { analyserRapport, formaterRapportCoffre } = require('./reportEngine');
 const { gererCommandesPatron } = require('./menuPatron');
 const { analyserMessage } = require('./analyseur'); // Fix 4 : brancher l'analyseur
+const { agentDialogueManager } = require('./agents'); // 👁️ Import du cerveau pour l'Oeil de Lynx
 const creerGestionnaireManagers = require('./managers'); // Fix 5 : stats managers
 let gestionnaireManagers = null; // initialisé au premier message
 const cacheOuverture = new Map();
@@ -588,9 +589,46 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     const expediteur = msg.pushName || participantJid.split('@')[0] || 'Inconnu';
     const texteBrut = extraireTexte(msg);
 
-    const estMedia = !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.documentMessage || msg.message?.documentWithCaptionMessage);
+    const estVideo = !!(msg.message?.videoMessage);
+    const estImage = !!(msg.message?.imageMessage);
+    const estMedia = !!(estImage || estVideo || msg.message?.documentMessage || msg.message?.documentWithCaptionMessage);
     const texteStocke = estMedia && !texteBrut ? '[Média sans légende]' : texteBrut;
 
+    if (!texteBrut && !estMedia) return; 
+
+    // ==========================================
+    // 👁️ CHANTIER 3 : L'ŒIL DE LYNX (Validation des Médias)
+    // ==========================================
+    if (estDansSynchro || jid === '243900435187-1578719495@g.us') {
+        
+        // 🎥 Règle 1 : Vidéo Charging Room obligatoire (Pas de photo, pas de texte)
+        if (texteNormalise.includes('charging room') || texteNormalise.includes('charging')) {
+            if (!estVideo) {
+                const sujet = `Le manager @${expediteur} vient d'envoyer un message sur le "charging room" mais sans y joindre la VRAIE vidéo. Rappelle-lui que le règlement (Point 14) exige une vidéo de la salle, et qu'un simple texte ou photo ne suffit pas.`;
+                const msgRappel = await agentDialogueManager(sujet, expediteur);
+                await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
+                return; // 🛑 On bloque le traitement !
+            }
+        }
+
+        // 📸 Règle 2 : Captures de présences (Sheets) obligatoires
+        if (texteNormalise.includes('présence') || texteNormalise.includes('presence') || texteNormalise.includes('sheet')) {
+            if (!estImage) {
+                const sujet = `Le manager @${expediteur} parle des présences/sheets mais n'a pas joint de capture d'écran (image). Rappelle-lui le Point 6 du règlement : il faut obligatoirement la capture visuelle.`;
+                const msgRappel = await agentDialogueManager(sujet, expediteur);
+                await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
+                return; // 🛑 On bloque le traitement !
+            }
+        }
+
+        // ⏱️ Règle 3 : Traque du message "Call me"
+        if (texteNormalise.includes('call me') || texteNormalise.includes('callme')) {
+            const sujet = `Le manager @${expediteur} vient de signaler un "call me". Accuse réception poliment. Dis-lui que le chrono de résolution est lancé et qu'il ne doit surtout pas oublier d'envoyer une capture d'écran une fois le problème résolu (Point 12).`;
+            const msgCallMe = await agentDialogueManager(sujet, expediteur);
+            await sock.sendMessage(jid, { text: msgCallMe, mentions: [participantJid] });
+            // Ici, on laisse passer le message dans le système
+        }
+    }
     if (!texteBrut) return; 
 
     const texteNormalise = texteBrut.toLowerCase().replace(/\*/g, '').replace(/\s+/g, ' ').trim();
