@@ -663,6 +663,36 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         }
     }
 
+    // ==========================================
+        // 🧑‍💼 CHANTIER 4 : L'ANALYSTE RH & TECHNIQUE
+        // ==========================================
+        
+        // 🚨 4A : Traque des Pannes Matérielles (Point 7)
+        if (texteNormalise.includes('panne') || texteNormalise.includes('problème') || texteNormalise.includes('probleme') || texteNormalise.includes('ne marche pas')) {
+            // Le bot laisse passer le message dans le groupe, mais t'envoie un Flash discret en privé
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                text: `🚨 *FLASH TECHNIQUE* 🚨\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Signalement :*\n"${texteBrut}"\n\n👉 J'ai détecté un potentiel problème matériel sur le terrain (Point 7).`
+            });
+        }
+
+        // 👥 4B : Traque des Absences sans justification (Point 2)
+        if (texteNormalise.includes('rapport pos') || texteNormalise.includes('pos')) {
+            if (texteNormalise.includes('absent') || texteNormalise.includes('manquant') || texteNormalise.includes('absence')) {
+                
+                // On vérifie si le manager a donné un début d'explication
+                const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé'];
+                const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
+                
+                if (!aUneJustification) {
+                    // 🧠 L'IA interpelle le manager publiquement
+                    const sujet = `Le manager @${expediteur} vient de signaler une absence dans son rapport POS, mais n'a donné AUCUNE RAISON. Rappelle-lui que le Point 2 du règlement exige de spécifier les raisons des absences, et demande-lui poliment mais fermement de justifier.`;
+                    
+                    const msgRappel = await agentDialogueManager(sujet, expediteur);
+                    await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
+                }
+            }
+        }
+
     // Fix 4 : analyser le message AVANT de sauvegarder pour enrichir avec catégorie/priorité
     const messageBase = {
         groupeJid: jid, groupeNom: NOMS_GROUPES[jid] || jid,
