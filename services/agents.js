@@ -340,18 +340,16 @@ async function agentRecommandations(messages, historique = [], etatTwin = null) 
 }
 
 // ── Agent Dialogue Manager (Le communicateur naturel) ────────────────────────
-async function agentDialogueManager(sujet, nomManager, historique = []) {
-    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au manager @${nomManager}.
+async function agentDialogueManager(sujet, numerosManagers, historique = []) {
+    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au(x) manager(s) dont le(s) numéro(s) est/sont : ${numerosManagers}.
     
 Sujet de l'intervention : ${sujet}
 
-Règles pour ce message :
-- Tu ES le patron (Boss). Parle directement en ton nom à la première personne ("je"). Ne dis JAMAIS "de la part de la direction".
-- Commence TOUJOURS le message par un complément respectueux, par exemple "Cher @${numerosManagers}," ou "Bonjour cher @${numerosManagers},".
-- Parle de manière conversationnelle, fluide et humaine.
-- Sois ferme mais poli et respectueux.
-- Demande une action claire ou une réponse du manager.
-- N'utilise pas de format de rapport formel, juste un message WhatsApp naturel.`;
+Règles ABSOLUES pour ce message :
+1. Tu ES le Boss. Parle en ton propre nom ("Je"). Ne dis JAMAIS "de la part de la direction".
+2. Commence TOUJOURS par "Bonjour @${numerosManagers}," ou "Cher @${numerosManagers},". Il est CRUCIAL de garder le symbole @ collé au numéro pour que la mention WhatsApp fonctionne.
+3. Sois ferme mais poli. Demande une action claire.
+4. Pas de format rigide, juste un message WhatsApp fluide et naturel.`;
 
     const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
