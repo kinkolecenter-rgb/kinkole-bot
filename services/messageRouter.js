@@ -702,28 +702,22 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         }
 
         // 👥 4B : Traque des Absences sans justification (Point 2)
-        // On exige des mots plus précis pour être sûr que c'est le vrai Rapport POS
         if (texteNormalise.includes('rapport pos') || texteNormalise.includes('pos en charge')) {
-            
             const parleAbsence = texteNormalise.includes('absent') || texteNormalise.includes('manquant') || texteNormalise.includes('absence');
             
-            // 🧠 NOUVEAU : Le bot pardonne si c'est un zéro !
-            const zeroAbsence = texteNormalise.includes('absence : 0') || texteNormalise.includes('absence :0') || 
-                                texteNormalise.includes('0 absence') || texteNormalise.includes('absent : 0') || 
-                                texteNormalise.includes('absence :00') || texteNormalise.includes("d'absence :00") ||
-                                texteNormalise.includes('absences : 0');
+            // 🧠 CORRECTION : Regex strict pour ne cibler QUE les vrais zéros (0 ou 00) et ignorer 01, 02, 03...
+            const zeroAbsence = /absences?\s*[:=]\s*0+\b/.test(texteNormalise) || /0+\s*absences?\b/.test(texteNormalise) || /absent\s*[:=]\s*0+\b/.test(texteNormalise);
 
             if (parleAbsence && !zeroAbsence) {
                 
-                // On vérifie si le manager a donné un début d'explication
                 const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé'];
                 const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
                 
                 if (!aUneJustification) {
-                    // 🧠 L'IA interpelle le manager publiquement
-                    const sujet = `Le manager @${expediteur} vient de signaler une absence dans son rapport POS, mais n'a donné AUCUNE RAISON. Rappelle-lui que le Point 2 du règlement exige de spécifier les raisons des absences, et demande-lui poliment mais fermement de justifier.`;
+                    const sujet = `Le manager vient de signaler une absence dans son rapport POS, mais n'a donné AUCUNE RAISON. Rappelle-lui que le Point 2 du règlement exige de spécifier les raisons des absences, et demande-lui poliment mais fermement de justifier.`;
                     
-                    const msgRappel = await agentDialogueManager(sujet, expediteur);
+                    // 👈 On utilise le NUMÉRO pour que le tag fonctionne en bleu !
+                    const msgRappel = await agentDialogueManager(sujet, participantJid.split('@')[0]);
                     await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
                 }
             }
