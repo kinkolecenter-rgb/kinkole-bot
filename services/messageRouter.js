@@ -604,31 +604,33 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
         // ==========================================
         // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
-        if (estDansSynchro && !estPatron) {
-            const demandeApprobation = (
-                (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('sortie') || texteNormalise.includes('t-shirt'))) ||
-                texteNormalise.includes('sanction') ||
-                texteNormalise.includes('shift') ||
-                texteNormalise.includes('dépense') ||
-                texteNormalise.includes('depense')
-            );
+        // 🛡️ SÉCURITÉ : On exclut le rapport de fermeture et les confirmations déjà approuvées
+            const estRapportFermeture = texteNormalise.includes('dernier rapport') || texteNormalise.includes('etat des stocks') || texteNormalise.includes('état des stocks');
+            const estDejaApprouve = texteNormalise.includes('approuvée') || texteNormalise.includes('approuvee');
+            
+            if (!estRapportFermeture && !estDejaApprouve) {
+                // 🧠 Le bot comprend maintenant le "langage terrain"
+                const demandeApprobation = (
+                    texteNormalise.includes('approbation') ||
+                    texteNormalise.includes('besoin de') ||
+                    (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('fc') || texteNormalise.includes('achat') || texteNormalise.includes('sortie'))) ||
+                    texteNormalise.includes('sanction') ||
+                    texteNormalise.includes('changement de shift') ||
+                    texteNormalise.includes('dépense') ||
+                    texteNormalise.includes('depense')
+                );
 
-            if (demandeApprobation) {
-                // 🧠 L'IA parle EN TON NOM (La Direction)
-                const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
-                
-                const msgBlocage = await agentDialogueManager(sujet, expediteur);
-                await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
-                
-                // 🚨 Escalade silencieuse vers toi en privé pour que tu sois alerté
-                await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                    text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
-                });
-                
-                return; // 🛑 On arrête la lecture ici
+                if (demandeApprobation) {
+                    const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
+                    const msgBlocage = await agentDialogueManager(sujet, participantJid.split('@')[0]);
+                    await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+                    
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                        text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+                    });
+                    return;
+                }
             }
-        }
-
    // ==========================================
     // 👁️ CHANTIER 3 : L'ŒIL DE LYNX (Validation des Médias)
     // ==========================================
@@ -1136,6 +1138,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         texteNormalise.includes('etat d activites') ||
         texteNormalise.includes('rapport actuel') || // 👈 NOUVEAU SYNONYME
         texteNormalise.includes('etat actuel') ||    // 👈 NOUVEAU SYNONYME
+        texteNormalise.includes('actuel') ||
         texteNormalise.includes('etat materiel') ||
         texteNormalise.includes('taux de change') ||
         texteNormalise.includes('taux') ||
