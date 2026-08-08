@@ -74,18 +74,14 @@ function initialiserTourDeControle(sock, etatAttenteRef, memoire, redisClientRef
 }
 
 /**
- * Utilitaire pour récupérer les responsables SANS le mot "Inconnu"
+ * Utilitaire pour récupérer les numéros et les JIDs des managers actifs
  */
-async function getManagersActifsNoms() {
-    let responsable = "l'équipe";
+async function getManagersActifsData() {
+    let jids = [];
     try {
         const heureActuelle = new Date().getHours();
         const debutService = new Date();
-        if (heureActuelle < 14) {
-            debutService.setHours(6, 0, 0, 0);
-        } else {
-            debutService.setHours(16, 0, 0, 0);
-        }
+        debutService.setHours(heureActuelle < 14 ? 6 : 16, 0, 0, 0);
         
         const messagesService = await db.prisma.message.findMany({
             where: { groupeJid: GROUPE_SYNCHRO, timestamp: { gte: debutService, lte: new Date() } },
@@ -94,22 +90,16 @@ async function getManagersActifsNoms() {
         });
 
         if (messagesService && messagesService.length > 0) {
-            const jidsEnService = messagesService.map(m => m.senderJid);
-            const managersActifs = await db.prisma.manager.findMany({
-                where: { jid: { in: jidsEnService } },
-                select: { nom: true }
-            });
-
-            // On filtre pour enlever "Inconnu"
-            const nomsPropres = managersActifs.map(m => m.nom).filter(n => n && !n.toLowerCase().includes('inconnu'));
-            if (nomsPropres.length > 0) {
-                responsable = nomsPropres.join(' et ');
-            }
+            jids = messagesService.map(m => m.senderJid);
         }
-    } catch (e) {
-        console.error('⚠️ Erreur filtrage managers:', e.message);
-    }
-    return responsable;
+    } catch (e) {}
+    
+    if (jids.length === 0) jids = ['243000000000@s.whatsapp.net']; // Fallback
+    
+    // Extrait juste les numéros pour que l'IA puisse écrire @24389...
+    const numeros = jids.map(j => j.split('@')[0]).join(' et @');
+    
+    return { jids, numeros };
 }
 
 /**
@@ -117,36 +107,21 @@ async function getManagersActifsNoms() {
  */
 async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
     try {
-        console.log(`🔍 Tour de Contrôle : Vérification du rapport [${typeRapport}]...`);
         const rapportsDuJour = await db.getReportsAujourdhui(typeRapport);
-
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
-            const responsable = await getManagersActifsNoms();
-
-            // 🧠 Message naturel via IA au lieu du texte codé en dur
+            const data = await getManagersActifsData();
             const sujet = `Le rapport ${nomRapport} est en retard. Relance-les poliment mais fermement pour qu'ils l'envoient immédiatement.`;
-            const messageAlerte = await agentDialogueManager(sujet, responsable);
+            const messageAlerte = await agentDialogueManager(sujet, data.numeros);
             
-            await sock.sendMessage(groupeId, { text: messageAlerte });
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Rapport Manquant* : L'IA a réclamé ${nomRapport} à ${responsable}.` 
-            });
-        } else {
-            console.log(`✅ Rapport [${typeRapport}] reçu aujourd'hui. Aucun rappel.`);
+            await sock.sendMessage(groupeId, { text: messageAlerte, mentions: data.jids });
         }
-    } catch (error) {
-        console.error(`❌ Erreur Tour de Contrôle [${typeRapport}]:`, error.message);
-    }
+    } catch (error) {}
 }
 
-/**
- * Vérification des 5 rapports d'État Actuel par compteur
- */
 async function verifierEtatActuel(sock, heureCible, nomRapport, groupeId) {
     try {
         const rapports = await db.getReportsAujourdhui('etat_actuel');
         const nombreTotalAujourdhui = rapports ? rapports.length : 0;
-
         let objectifRapports = 1;
         if (heureCible === 11) objectifRapports = 2;
         if (heureCible === 13) objectifRapports = 3;
@@ -154,44 +129,30 @@ async function verifierEtatActuel(sock, heureCible, nomRapport, groupeId) {
         if (heureCible === 17) objectifRapports = 5;
 
         if (nombreTotalAujourdhui < objectifRapports) {
-            const responsable = await getManagersActifsNoms();
-            const sujet = `Le rapport ${nomRapport} est en retard (on en a reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment pour qu'ils l'envoient.`;
-            const messageAlerte = await agentDialogueManager(sujet, responsable);
-            
-            await sock.sendMessage(groupeId, { text: messageAlerte });
+            const data = await getManagersActifsData();
+            const sujet = `Le rapport ${nomRapport} est en retard (on en a reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment.`;
+            const messageAlerte = await agentDialogueManager(sujet, data.numeros);
+            await sock.sendMessage(groupeId, { text: messageAlerte, mentions: data.jids });
         }
     } catch (error) {}
 }
 
-/**
- * Vérification rapports connexion par compteur
- */
 async function verifierRappelConnexion(sock, heureCible, nomRapport, groupeId) {
     try {
-        console.log(`🔍 Vérification par compteur [${nomRapport}]...`);
         const rapports = await db.getReportsAujourdhui('details_connexion');
         const nombreTotalAujourdhui = rapports ? rapports.length : 0;
-
         let objectifRapports = 1;
         if (heureCible === 12) objectifRapports = 1;
         if (heureCible === 15) objectifRapports = 2;
         if (heureCible === 17) objectifRapports = 3;
 
         if (nombreTotalAujourdhui < objectifRapports) {
-            const responsable = await getManagersActifsNoms();
-            const sujet = `Le rapport de ${nomRapport} est en retard (reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment mais fermement.`;
-            const messageAlerte = await agentDialogueManager(sujet, responsable);
-
-            await sock.sendMessage(groupeId, { text: messageAlerte });
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, { 
-                text: `🚨 *Rapport Manquant* : ${nomRapport} en retard (${nombreTotalAujourdhui}/${objectifRapports}).` 
-            });
-        } else {
-            console.log(`✅ Objectif atteint : ${nombreTotalAujourdhui} rapport(s). Aucun retard.`);
+            const data = await getManagersActifsData();
+            const sujet = `Le rapport de ${nomRapport} est en retard (reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment.`;
+            const messageAlerte = await agentDialogueManager(sujet, data.numeros);
+            await sock.sendMessage(groupeId, { text: messageAlerte, mentions: data.jids });
         }
-    } catch (error) {
-        console.error(`❌ Erreur Tour de Contrôle [${nomRapport}]:`, error.message);
-    }
+    } catch (error) {}
 }
 
 /**
