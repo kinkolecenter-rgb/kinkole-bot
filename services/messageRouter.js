@@ -666,29 +666,51 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
     } // <-- C'est cette accolade qui manquait pour fermer le Chantier 3 !
 
     // ==========================================
-    // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
-    // ==========================================
-    // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
-    if (estDansSynchro && !estPatron) {
-        const demandeApprobation = (
-            (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('sortie') || texteNormalise.includes('t-shirt'))) ||
-            texteNormalise.includes('sanction') ||
-            texteNormalise.includes('shift') ||
-            texteNormalise.includes('dépense') ||
-            texteNormalise.includes('depense')
-        );
-
-        if (demandeApprobation) {
-            const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
-            const msgBlocage = await agentDialogueManager(sujet, expediteur);
-            await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+        // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
+        // ==========================================
+        // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
+        if (estDansSynchro && !estPatron) {
             
-            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
-            });
-            return;
+            // 🛡️ BOUCLIER ABSOLU : On protège tous les rapports légitimes et les accords
+            const estUnRapportOfficiel = (
+                texteNormalise.includes('dernier rapport') || 
+                texteNormalise.includes('etat des stocks') || 
+                texteNormalise.includes('état des stocks') ||
+                texteNormalise.includes('rapport actuel') ||
+                texteNormalise.includes('etat actuel') ||
+                texteNormalise.includes('ouverture') ||
+                texteNormalise.includes('rapport pos')
+            );
+            const estDejaApprouve = texteNormalise.includes('approuvée') || texteNormalise.includes('approuvee');
+            
+            if (!estUnRapportOfficiel && !estDejaApprouve) {
+                // 🧠 Le bot comprend le vrai langage terrain
+                const demandeApprobation = (
+                    texteNormalise.includes('approbation') ||
+                    texteNormalise.includes('besoin de') ||
+                    (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('fc') || texteNormalise.includes('achat') || texteNormalise.includes('sortie'))) ||
+                    texteNormalise.includes('sanction') ||
+                    texteNormalise.includes('changement de shift') ||
+                    texteNormalise.includes('dépense') ||
+                    texteNormalise.includes('depense')
+                );
+
+                if (demandeApprobation) {
+                    
+                    // 🔴 PÉNALITÉ : Décision non autorisée (-15 pts)
+                    if (gestionnaireManagers) await gestionnaireManagers.penaliserManager(participantJid, 'decisions_non_autorisees');
+                    
+                    const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
+                    const msgBlocage = await agentDialogueManager(sujet, participantJid.split('@')[0]);
+                    await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+                    
+                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                        text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+                    });
+                    return;
+                }
+            }
         }
-    }
 
     // ==========================================
     // 🧑‍💼 CHANTIER 4 : L'ANALYSTE RH & TECHNIQUE
