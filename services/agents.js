@@ -347,7 +347,7 @@ Sujet de l'intervention : ${sujet}
 
 Règles pour ce message :
 - Tu ES le patron (Boss). Parle directement en ton nom à la première personne ("je"). Ne dis JAMAIS "de la part de la direction".
-- Commence TOUJOURS le message par un complément respectueux, par exemple "Cher @${nomManager}," ou "Bonjour cher @${nomManager},".
+- Commence TOUJOURS le message par un complément respectueux, par exemple "Cher @${numerosManagers}," ou "Bonjour cher @${numerosManagers},".
 - Parle de manière conversationnelle, fluide et humaine.
 - Sois ferme mais poli et respectueux.
 - Demande une action claire ou une réponse du manager.
@@ -360,7 +360,7 @@ Règles pour ce message :
     );
     
     // Fallback de sécurité si l'IA est indisponible
-    if (!reponse) return `⚠️ Cher @${nomManager}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
+    if (!reponse) return `⚠️ Cher @${numerosManagers}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
     return reponse;
 }
 
