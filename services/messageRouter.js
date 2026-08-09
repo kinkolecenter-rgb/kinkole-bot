@@ -732,7 +732,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
 
             if (parleAbsence && !zeroAbsence) {
                 
-                const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé'];
+                const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé', 'reliquat', 'dette', 'suspendu', 'id'];
                 const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
                 
                 if (!aUneJustification) {
@@ -742,6 +742,17 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                     const msgRappel = await agentDialogueManager(sujet, participantJid.split('@')[0]);
                     await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
                 }
+            }
+        }
+        // 💸 4C : Pression sur les absences pour "Reliquat"
+        // Se déclenche si le mot reliquat est dans le rapport POS, ou si le message est une réponse très courte (ex: "1363018 reliquat")
+        if (texteNormalise.includes('reliquat') || texteNormalise.includes('dette')) {
+            if (texteNormalise.includes('absence') || texteNormalise.includes('absent') || texteNormalise.length < 50) {
+                
+                const sujet = `Le manager justifie une absence par un "reliquat" (un manquant d'argent). Dis-lui que c'est bien noté, mais exige fermement qu'il suive ce cas de très près pour qu'il soit résolu au plus vite, afin d'éviter les absences prolongées dans le réseau.`;
+                
+                const msgRappel = await agentDialogueManager(sujet, participantJid.split('@')[0]);
+                await sock.sendMessage(jid, { text: msgRappel, mentions: [participantJid] });
             }
         }
     }
