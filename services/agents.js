@@ -347,7 +347,7 @@ Sujet de l'intervention : ${sujet}
 
 Règles ABSOLUES pour ce message :
 1. Tu ES le Boss. Parle en ton propre nom ("Je"). Ne dis JAMAIS "de la part de la direction".
-2. Commence TOUJOURS par "Bonjour @${numerosManagers}," ou "Cher @${numerosManagers},". Il est CRUCIAL de garder le symbole @ collé au numéro pour que la mention WhatsApp fonctionne.
+2. Commence TOUJOURS par "Bonjour Cher @${numerosManagers}," ou "Cher @${numerosManagers},". Il est CRUCIAL de garder le symbole @ collé au numéro pour que la mention WhatsApp fonctionne.
 3. Sois ferme mais poli. Demande une action claire.
 4. Pas de format rigide, juste un message WhatsApp fluide et naturel.`;
 
