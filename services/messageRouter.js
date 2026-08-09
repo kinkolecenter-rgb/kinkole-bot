@@ -917,6 +917,7 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         );
 
         const estResolution = texteNormalise.includes('resolu') || texteNormalise.includes('résolu');
+        const contientIDMachine = /[0-9]{5,7}/.test(texteNormalise);
 
         const estBilanOk = texteNormalise === 'oui' || 
                            texteNormalise.includes('tout est ok') || 
