@@ -242,19 +242,29 @@ function formaterRapportCoffre(texteBrut) {
         msg += `*Notes Additionnelles* :\n${extras.map(e => `  - ${e}`).join('\n')}\n`;
     }
     
-    // ==========================================
-    // 7. DÉTECTION : RAPPORT POS
-    // ==========================================
+    // 7. RAPPORT POS
     else if (
         texteNorm.includes('rapport pos') ||
         (texteNorm.includes('pos au shop') && texteNorm.includes('pos en panne'))
     ) {
         type = 'pos';
         const matchAbsences = texteNorm.match(/nbre d.absence\s*:?\s*(\d+)/i);
-        donnees = {
-            absences: matchAbsences ? parseInt(matchAbsences[1]) : null
-        };
+        donnees = { absences: matchAbsences ? parseInt(matchAbsences[1]) : null };
     }
+    
+    // 8. RAPPORT ÉTAT ACTUEL
+    else if (
+        texteNorm.includes('rapport actuel') ||
+        texteNorm.includes('etat actuel') ||
+        texteNorm.includes('état actuel') ||
+        (texteNorm.includes('nbre des clients') || texteNorm.includes('nombre de clients')) &&
+        texteNorm.includes('guichet')
+    ) {
+        type = 'etat_actuel';
+        donnees = {};
+    }
+
+    
 
     return msg;
 }
