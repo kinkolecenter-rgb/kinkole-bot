@@ -127,6 +127,16 @@ function parserIncidentsFormat(texte) {
         return [];
     }
 
+    // Barrière annulation/demande
+    if (texteSecurise.includes('annulation') || 
+        texteSecurise.includes('versement') ||
+        texteSecurise.includes('demande t-shirt') ||
+        texteSecurise.includes('demande tshirt') ||
+        texteSecurise.includes('achat carburant') ||
+        texteSecurise.includes('présent au shop')) {
+        return [];
+    }
+
     const lignes = texte.split('\n').map(l => l.trim()).filter(Boolean);
     const incidents = [];
 
@@ -844,11 +854,23 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                 if (incidents && incidents.length > 0) {
                     
                     const tenteDeRepondre = texteNormalise.includes('résolu') || 
-                                            texteNormalise.includes('resolu') || 
-                                            texteNormalise.includes('non résolu') ||
-                                            texteNormalise.includes('non resolu');
+                        texteNormalise.includes('resolu') || 
+                        texteNormalise.includes('non résolu') ||
+                        texteNormalise.includes('non resolu');
+
+                        const estMessageHorsSujet = (
+                            texteNormalise.includes('annulation') ||
+                            texteNormalise.includes('versement') ||
+                            texteNormalise.includes('demande t-shirt') ||
+                            texteNormalise.includes('demande tshirt') ||
+                            texteNormalise.includes('demande matériel') ||
+                            texteNormalise.includes('achat carburant') ||
+                            texteNormalise.includes('présent au shop') ||
+                            texteNormalise.includes('ir ') ||  // inspecteur
+                            texteNormalise.includes('carburant')
+                        );
                                             
-                    if (!tenteDeRepondre) {
+                    if (!tenteDeRepondre && !estMessageHorsSujet) {
                         const maintenant = Date.now();
                         const dernierRappel = cooldownRelance.get(participantJid) || 0;
                         
@@ -963,8 +985,20 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                                       texteNormalise.includes('resolu') || 
                                       texteNormalise.includes('résolu') || 
                                       texteNormalise.includes('ok');
+            
 
-            if (ressembleAReponse) {
+           const estRapportActuelOuConnexion = (
+                texteNormalise.includes('rapport actuel') ||
+                texteNormalise.includes('etat actuel') ||
+                texteNormalise.includes('nbre des clients') ||
+                texteNormalise.includes('détails connexion') ||
+                texteNormalise.includes('details connexion') ||
+                texteNormalise.includes('ids connecté') ||
+                texteNormalise.includes('instant win') ||
+                texteNormalise.includes('tickets loto')
+            );
+            
+            if (ressembleAReponse && !estRapportActuelOuConnexion) {
                 // ÉTAPE A : On attendait "oui/non/IDs" après la question de 23h
                 if (attente.etape === 'ATTENTE_REPONSE_23H') {
                     if (estBilanOk) {
