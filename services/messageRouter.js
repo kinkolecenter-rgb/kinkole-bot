@@ -882,23 +882,26 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                             const idsNonResolus = [...new Set(incidents.map(i => i.machineId))].join(', ');
                             const exempleId = incidents[0].machineId; 
                             
-                            let msgRappel = "";
+                            //let msgRappel = "";
                             
-                            if (heureActuelle < 12) {
-                                // 🟢 MATIN (10h-12h) : La relance douce et polie
-                                msgRappel = `👋 Bonjour @${participantJid.split('@')[0]},\n\n` +
-                                            `Est-ce que le problème de non-clôturé pour les IDs *${idsNonResolus}* est résolu ce matin ?\n\n` +
-                                            `📝 *Merci de me répondre avec ce modèle :*\n` +
-                                            `👉 *${exempleId} résolu* (Si c'est réglé)\n` +
-                                            `👉 *${exempleId} non résolu* (Si ça persiste)`;
-                            } else {
-                                // 🔴 APRÈS-MIDI (Dès 12h) : Le bot s'impatiente et "hurle"
-                                msgRappel = `⚠️ @${participantJid.split('@')[0]}, DÉSOLÉ DE VOUS INTERROMPRE !\n\n` +
-                                            `Le reliquat sur les machines *${idsNonResolus}* traîne depuis hier. J'ai besoin d'une réponse de votre part pour la base de données.\n\n` +
-                                            `🚨 *ACTION REQUISE IMMÉDIATEMENT :*\n` +
-                                            `👉 Écrivez *${exempleId} résolu*\n` +
-                                            `👉 Ou *${exempleId} non résolu*`;
-                            }
+                            const incidentLePlusAncien = incidents.reduce((a, b) => 
+                                    new Date(a.dateDeclaration) < new Date(b.dateDeclaration) ? a : b
+                                );
+                                const maintenant2 = new Date();
+                                const ageJours = Math.floor((maintenant2 - new Date(incidentLePlusAncien.dateDeclaration)) / (1000 * 60 * 60 * 24));
+                                
+                                let sujetHarceleur;
+                                if (ageJours === 0) {
+                                    sujetHarceleur = heureActuelle < 12
+                                        ? `Demander poliment à ce manager si le reliquat des IDs ${idsNonResolus} est résolu ce matin. Lui rappeler de répondre : "${exempleId} résolu" ou "${exempleId} non résolu".`
+                                        : `Rappeler fermement mais avec respect que le reliquat des IDs ${idsNonResolus} n'est toujours pas clôturé aujourd'hui. Une réponse est attendue : "${exempleId} résolu" ou "${exempleId} non résolu".`;
+                                } else if (ageJours === 1) {
+                                    sujetHarceleur = `Rappeler avec sérieux à ce manager que les IDs ${idsNonResolus} traînent depuis hier sans réponse. C'est inacceptable. Exiger une réponse immédiate et claire : "${exempleId} résolu" ou "${exempleId} non résolu". Mentionner que cela commence à poser un problème de gestion.`;
+                                } else {
+                                    sujetHarceleur = `Interpeller fermement ce manager : les IDs ${idsNonResolus} sont non clôturés depuis ${ageJours} jours. C'est une situation grave qui ne peut plus durer. Exiger une réponse définitive aujourd'hui même, avec le modèle : "${exempleId} résolu" ou "${exempleId} non résolu". Rappeler que des sanctions sont prévues pour les négligences répétées.`;
+                                }
+                                
+                                const msgRappel = await agentDialogueManager(sujetHarceleur, participantJid.split('@')[0]);
                             
                             // 🔒 FIX : On enregistre l'heure AVANT d'envoyer le message pour bloquer les tirs groupés
                             cooldownRelance.set(participantJid, maintenant);
