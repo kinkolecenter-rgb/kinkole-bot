@@ -165,7 +165,25 @@ async function rappelerIncidentsActifs(sock, groupeId) {
 
         const listeIds = [...new Set(incidents.map(inc => inc.machineId))];
 
-        const sujet = `Il reste ${listeIds.length} machine(s) en anomalie (IDs: ${listeIds.join(', ')}). Demande-leur de répondre avec le modèle de mise à jour pour clôturer les statuts.`;
+        // REMPLACER le bloc sujet par :
+        const maintenant = new Date();
+        const incidentLePlusAncien = incidents.reduce((a, b) => 
+            new Date(a.dateDeclaration) < new Date(b.dateDeclaration) ? a : b
+        );
+        const ageJours = Math.floor((maintenant - new Date(incidentLePlusAncien.dateDeclaration)) / (1000 * 60 * 60 * 24));
+        const heure = maintenant.getHours();
+        
+        let sujet;
+        if (ageJours === 0) {
+            sujet = heure < 18
+                ? `Rappeler poliment à l'équipe que ${listeIds.length} machine(s) avec reliquat aujourd'hui (IDs: ${listeIds.join(', ')}). Les inviter à envoyer leur mise à jour.`
+                : `Signaler à l'équipe que les IDs ${listeIds.join(', ')} doivent être clôturés avant la fin de service ce soir. svp`;
+        } else if (ageJours === 1) {
+            sujet = `Signaler avec fermeté à l'équipe que les IDs ${listeIds.join(', ')} n'ont pas été clôturés hier et traînent encore aujourd'hui. C'est vraiment inaceptable. Une réponse est exigée maintenant.`;
+        } else {
+            sujet = `Interpeller l'équipe de manière très ferme : les IDs ${listeIds.join(', ')} sont non clôturés depuis ${ageJours} jours. Cette négligence est inacceptable et sera penalisés. Exiger une réponse définitive immédiate.`;
+        }
+        
         let msgRelance = await agentDialogueManager(sujet, "l'équipe");
 
         // On force le modèle à la fin pour sécuriser la BDD
