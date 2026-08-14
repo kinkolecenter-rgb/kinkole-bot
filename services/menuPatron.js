@@ -542,6 +542,33 @@ async function gererCommandesPatron(sock, jid, texteBrut) {
         return true;
     }
 
+
+    if (texteNormalise === '!visites-mois' || texteNormalise.includes('visite') && texteNormalise.includes('mois') || texteNormalise.includes('visite') && texteNormalise.includes('inspecteur')) {
+    try {
+        const visites = await prisma.visiteTerrain.groupBy({
+            by: ['managerJid'],
+            _count: { id: true },
+            orderBy: { _count: { id: 'desc' } }
+        });
+
+        const jids = visites.map(v => v.managerJid);
+        const managers = await prisma.manager.findMany({ where: { jid: { in: jids } } });
+        const mapNoms = Object.fromEntries(managers.map(m => [m.jid, m.nom]));
+
+        let msg = `📊 *VISITES PAR INSPECTEUR (total)*\n\n`;
+        for (const v of visites) {
+            const nom = mapNoms[v.managerJid] || v.managerJid;
+            msg += `• *${nom}* : ${v._count.id} visite(s)\n`;
+        }
+        await sock.sendMessage(jid, { text: msg });
+    } catch (e) {
+        await sock.sendMessage(jid, { text: `❌ Erreur : ${e.message}` });
+    }
+    return true;
+}
+
+    
+
     return false; // Ce n'était pas une commande reconnue
 }
 
