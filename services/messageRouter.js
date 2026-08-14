@@ -665,6 +665,19 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         }
     } // <-- C'est cette accolade qui manquait pour fermer le Chantier 3 !
 
+        // ==========================================
+        // 🎥 SAUVEGARDE VIDEO CHARGING ROOM (Point 14)
+        // ==========================================
+        if (estDansSynchro && estVideo) {
+            const heureVideo = new Date().getHours();
+            if (heureVideo >= 9 && heureVideo <= 11) {
+                try {
+                    await db.sauvegarderReport('video_charging', { expediteur }, participantJid, true, null);
+                    console.log(`✅ Vidéo charging room reçue de ${expediteur} → DB sauvegardée.`);
+                } catch(e) {}
+            }
+        }
+
     // ==========================================
         // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
         // ==========================================
@@ -1166,7 +1179,8 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         texteNormalise.includes('etat d activites') ||
         texteNormalise.includes('rapport actuel') || // 👈 NOUVEAU SYNONYME
         texteNormalise.includes('etat actuel') ||    // 👈 NOUVEAU SYNONYME
-        texteNormalise.includes('actuel') ||
+        texteNormalise.includes('etat actuel du shop') ||
+        texteNormalise.includes('rapport actuel') ||
         texteNormalise.includes('etat materiel') ||
         texteNormalise.includes('taux de change') ||
         texteNormalise.includes('taux') ||
