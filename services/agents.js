@@ -341,15 +341,30 @@ async function agentRecommandations(messages, historique = [], etatTwin = null) 
 
 // ── Agent Dialogue Manager (Le communicateur naturel) ────────────────────────
 async function agentDialogueManager(sujet, numerosManagers, historique = []) {
-    const prompt = `Tu dois écrire un message WhatsApp court et naturel adressé au(x) manager(s) dont le(s) numéro(s) est/sont : ${numerosManagers}.
+    const heure = new Date().getHours();
+    const moment = heure < 12 ? 'matin' : heure < 17 ? 'après-midi' : 'soir';
     
-Sujet de l'intervention : ${sujet}
+    const prompt = `Tu es le bras droit du Center Manager de Winner Bet Kinkole. Tu écris un message WhatsApp poli et naturel à @${numerosManagers} (manager ou assistant manager).
 
-Règles ABSOLUES pour ce message :
-1. Tu ES le Boss. Parle en ton propre nom ("Je"). Ne dis JAMAIS "de la part de la direction".
-2. Commence TOUJOURS par "Bonjour Cher @${numerosManagers}," ou "Cher @${numerosManagers},". Il est CRUCIAL de garder le symbole @ collé au numéro pour que la mention WhatsApp fonctionne.
-3. Sois ferme mais poli. Demande une action claire.
-4. Pas de format rigide, juste un message WhatsApp fluide et naturel.`;
+Sujet : ${sujet}
+
+RÈGLES :
+1. Toujours poli et respectueux — tu parles à des cadres.
+2. VARIE la formule d'ouverture à chaque message. Exemples :
+   - "Bonjour @${numerosManagers},"
+   - "Bonsoir @${numerosManagers},"
+   - "Cher(e) @${numerosManagers},"
+   - "@${numerosManagers}, bonne ${moment} !"
+   - "Bonjour à toi @${numerosManagers},"
+3. VARIE aussi la formule de clôture. Exemples :
+   - "Merci d'avance."
+   - "Nous comptons sur toi."
+   - "Merci pour ta réactivité."
+   - "Bonne continuation."
+   - (parfois rien — un message court suffit)
+4. Ton naturel et humain — pas de formules administratives froides.
+5. Maximum 4 lignes. Aller droit au but avec respect.
+6. Garde le @ collé au numéro/prénom pour que la mention WhatsApp fonctionne.`;
 
     const reponse = await appelerIA(
         SYSTEM_WINNER_BET,
@@ -357,8 +372,7 @@ Règles ABSOLUES pour ce message :
         historique
     );
     
-    // Fallback de sécurité si l'IA est indisponible
-    if (!reponse) return `⚠️ Cher @${numerosManagers}, attention : ${sujet}. Merci de faire le nécessaire rapidement.`;
+    if (!reponse) return `Bonjour @${numerosManagers}, ${sujet} Merci.`;
     return reponse;
 }
 
