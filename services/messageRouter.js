@@ -50,6 +50,14 @@ const NOMS_GROUPES = {
 // Structure : { [groupeJid]: { etape: 'ATTENTE_REPONSE_23H' | 'ATTENTE_FORMAT', managerJid, timestamp } }
 const etatAttente = new Map();
 const cooldownRelance = new Map();
+const derniereDemande = new Map();
+const MANAGERS_APPROBATION = {
+    '138277243904251@lid': 'Boss Secondaire',
+    '51583027036329@lid':  'Vero',
+    '55456802304094@lid':  'Guy',
+    '104883655057593@lid': 'Josias',
+    '155023019364375@lid': 'Blaise'
+};
 const EXPIRATION_ATTENTE_MS = 2 * 60 * 60 * 1000; // 2 heures
 const CLE_REDIS_ATTENTE = 'etat_attente_synchro';
 
@@ -665,54 +673,101 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
                 } catch(e) {}
             }
         }
+    // ✅ CAPTURE APPROBATION PAR COORDINATEUR (Patron)
+if (estPatron) {
+    const estApprobation = (
+        texteNormalise.includes('approuvé') ||
+        texteNormalise.includes('approuve') ||
+        texteNormalise.includes('validé') ||
+        texteNormalise.includes('valide') ||
+        texteNormalise.includes('ok go') ||
+        texteNormalise.includes('accord') ||
+        texteNormalise.includes('autorisé') ||
+        texteNormalise.includes('autorise')
+    );
 
-    // ==========================================
-        // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS (Points 8, 9, 10)
-        // ==========================================
-        // 🛑 UNIQUEMENT DANS SYNCHRO et on ne bloque pas le Boss !
-        if (estDansSynchro && !estPatron) {
-            
-            // 🛡️ BOUCLIER ABSOLU : On protège tous les rapports légitimes et les accords
-            const estUnRapportOfficiel = (
-                texteNormalise.includes('dernier rapport') || 
-                texteNormalise.includes('etat des stocks') || 
-                texteNormalise.includes('état des stocks') ||
-                texteNormalise.includes('rapport actuel') ||
-                texteNormalise.includes('etat actuel') ||
-                texteNormalise.includes('ouverture') ||
-                texteNormalise.includes('rapport pos')
-            );
-            const estDejaApprouve = texteNormalise.includes('approuvée') || texteNormalise.includes('approuvee');
-            
-            if (!estUnRapportOfficiel && !estDejaApprouve) {
-                // 🧠 Le bot comprend le vrai langage terrain
-                const demandeApprobation = (
-                    texteNormalise.includes('approbation') ||
-                    texteNormalise.includes('besoin de') ||
-                    (texteNormalise.includes('demande') && (texteNormalise.includes('argent') || texteNormalise.includes('matériel') || texteNormalise.includes('materiel') || texteNormalise.includes('fc') || texteNormalise.includes('achat') || texteNormalise.includes('sortie'))) ||
-                    texteNormalise.includes('sanction') ||
-                    texteNormalise.includes('changement de shift') ||
-                    texteNormalise.includes('dépense') ||
-                    texteNormalise.includes('depense')
-                );
+    if (estApprobation) {
+        // Notifier le patron
+        await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+            text: `✅ *APPROBATION ENREGISTRÉE*\n\n*Par :* ${expediteur}\n*Message :*\n"${texteBrut}"`
+        });
 
-                if (demandeApprobation) {
-                    
-                    // 🔴 PÉNALITÉ : Décision non autorisée (-15 pts)
-                    if (gestionnaireManagers) await gestionnaireManagers.penaliserManager(participantJid, 'decisions_non_autorisees');
-                    
-                    const sujet = `Le manager @${expediteur} vient de formuler une demande d'approbation (argent, matériel, sanction ou shift). Parle EN TANT QUE DIRECTION. Dis-lui fermement que la demande est en cours d'analyse et qu'il est strictement interdit de prendre une décision ou d'engager des frais avant la validation finale.`;
-                    const msgBlocage = await agentDialogueManager(sujet, participantJid.split('@')[0]);
-                    await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
-                    
-                    await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
-                        text: `🛡️ *DEMANDE D'APPROBATION BLOQUÉE*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message d'origine :*\n"${texteBrut}"\n\n👉 Le bot a mis le manager en attente. Tu peux valider ou refuser directement dans le groupe.`
+        // Notifier les managers qui avaient fait une demande
+        for (const [managerJid] of Object.entries(MANAGERS_APPROBATION)) {
+            const demande = derniereDemande.get(managerJid);
+            if (demande && (Date.now() - demande.timestamp < 8 * 60 * 60 * 1000)) {
+                try {
+                    await sock.sendMessage(managerJid, {
+                        text: `✅ *APPROBATION ACCORDÉE*\n\nVotre demande a été approuvée par *${expediteur}*.\n\nVous pouvez procéder !`
                     });
-                    return;
-                }
+                    derniereDemande.delete(managerJid);
+                } catch(e) {}
             }
         }
+    }
+}
 
+    // 🛡️ CHANTIER 2 : LE BUREAU DES APPROBATIONS
+if (!estPatron) {
+    const estUnRapportOfficiel = (
+        texteNormalise.includes('dernier rapport') || 
+        texteNormalise.includes('etat des stocks') || 
+        texteNormalise.includes('état des stocks') ||
+        texteNormalise.includes('rapport actuel') ||
+        texteNormalise.includes('etat actuel') ||
+        texteNormalise.includes('ouverture') ||
+        texteNormalise.includes('rapport pos') ||
+        texteNormalise.includes('nbre des clients') ||
+        texteNormalise.includes('nombre des clients')
+    );
+    const estDejaApprouve = texteNormalise.includes('approuvée') || texteNormalise.includes('approuvee');
+
+    if (!estUnRapportOfficiel && !estDejaApprouve) {
+        const demandeApprobation = (
+            texteNormalise.includes('approbation') ||
+            texteNormalise.includes('besoin de') ||
+            (texteNormalise.includes('demande') && (
+                texteNormalise.includes('argent') || 
+                texteNormalise.includes('matériel') || 
+                texteNormalise.includes('materiel') || 
+                texteNormalise.includes('fc') || 
+                texteNormalise.includes('achat') || 
+                texteNormalise.includes('sortie')
+            )) ||
+            texteNormalise.includes('sanction') ||
+            texteNormalise.includes('changement de shift') ||
+            texteNormalise.includes('dépense') ||
+            texteNormalise.includes('depense')
+        );
+
+        if (demandeApprobation) {
+            if (gestionnaireManagers) await gestionnaireManagers.penaliserManager(participantJid, 'decisions_non_autorisees');
+
+            // 💾 Mémoriser la demande si c'est un manager de la liste
+            if (MANAGERS_APPROBATION.hasOwnProperty(participantJid)) {
+                derniereDemande.set(participantJid, { expediteur, texteBrut, timestamp: Date.now() });
+            }
+
+            if (estDansSynchro) {
+                // Réponse dans le groupe Synchro
+                const sujet = `Le manager @${expediteur} formule une demande d'approbation. Parle EN TANT QUE DIRECTION. Dis-lui fermement que c'est en cours d'analyse et interdit d'engager quoi que ce soit avant validation.`;
+                const msgBlocage = await agentDialogueManager(sujet, participantJid.split('@')[0]);
+                await sock.sendMessage(jid, { text: msgBlocage, mentions: [participantJid] });
+            } else {
+                // Réponse en PRIVÉ au manager
+                const sujet = `Le manager vient de formuler une demande d'approbation dans le groupe ${NOMS_GROUPES[jid] || jid}. Dis-lui EN PRIVÉ que sa demande est bien reçue, en cours d'analyse, et qu'il ne doit rien engager avant validation.`;
+                const msgPrive = await agentDialogueManager(sujet, participantJid.split('@')[0]);
+                await sock.sendMessage(participantJid, { text: msgPrive });
+            }
+
+            // 📩 Notification patron
+            await sock.sendMessage(`${config.monNumero}@s.whatsapp.net`, {
+                text: `🛡️ *DEMANDE D'APPROBATION*\n\n*Manager :* ${expediteur}\n*Groupe :* ${NOMS_GROUPES[jid] || jid}\n*Message :*\n"${texteBrut}"\n\n👉 ${estDansSynchro ? 'Répondu dans le groupe.' : 'Manager notifié en privé.'}`
+            });
+            return;
+        }
+    }
+}
     // ==========================================
     // 🧑‍💼 CHANTIER 4 : L'ANALYSTE RH & TECHNIQUE
     // ==========================================
