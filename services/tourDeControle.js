@@ -94,7 +94,7 @@ async function getManagersActifsData() {
         }
     } catch (e) {}
     
-    if (jids.length === 0) jids = ['243000000000@s.whatsapp.net']; // Fallback
+    if (jids.length === 0) return null; // Pas de managers actifs → on n'envoie rien
     
     // Extrait juste les numéros pour que l'IA puisse écrire @24389...
     const numeros = jids.map(j => j.split('@')[0]).join(' et @');
@@ -110,6 +110,7 @@ async function verifierEtRappeler(sock, typeRapport, nomRapport, groupeId) {
         const rapportsDuJour = await db.getReportsAujourdhui(typeRapport);
         if (!rapportsDuJour || rapportsDuJour.length === 0) {
             const data = await getManagersActifsData();
+        if (!data) return; // ← ajoute cette ligne juste après
             const sujet = `Le rapport ${nomRapport} est en retard. Relance-les poliment mais fermement pour qu'ils l'envoient immédiatement.`;
             const messageAlerte = await agentDialogueManager(sujet, data.numeros);
             
@@ -130,6 +131,7 @@ async function verifierEtatActuel(sock, heureCible, nomRapport, groupeId) {
 
         if (nombreTotalAujourdhui < objectifRapports) {
             const data = await getManagersActifsData();
+        if (!data) return; // ← ajoute cette ligne juste après
             const sujet = `Le rapport ${nomRapport} est en retard (on en a reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment.`;
             const messageAlerte = await agentDialogueManager(sujet, data.numeros);
             await sock.sendMessage(groupeId, { text: messageAlerte, mentions: data.jids });
@@ -148,6 +150,7 @@ async function verifierRappelConnexion(sock, heureCible, nomRapport, groupeId) {
 
         if (nombreTotalAujourdhui < objectifRapports) {
             const data = await getManagersActifsData();
+        if (!data) return; // ← ajoute cette ligne juste après
             const sujet = `Le rapport de ${nomRapport} est en retard (reçu ${nombreTotalAujourdhui}/${objectifRapports}). Relance-les poliment.`;
             const messageAlerte = await agentDialogueManager(sujet, data.numeros);
             await sock.sendMessage(groupeId, { text: messageAlerte, mentions: data.jids });
