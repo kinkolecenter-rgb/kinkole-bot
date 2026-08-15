@@ -820,8 +820,15 @@ async function gererMessageGroupe(sock, msg, jid, memoire, assistant) {
         const estUnRapportOfficiel = texteNormalise.includes('ouverture') || 
                                      texteNormalise.includes('team composition') || 
                                      texteNormalise.includes('matériel') || 
-                                     texteNormalise.includes('materiel') || 
+                                     texteNormalise.includes('materiel') ||
+                                    texteNormalise.includes('etat d activites actuel') ||
+                                    texteNormalise.includes('état d activités actuel') ||
+                                    texteNormalise.includes('rapport actuel 15h') ||
+                                    texteNormalise.includes('rapport actuel 13h') ||
+                                    texteNormalise.includes('nbre des clients') ||
+                                    texteNormalise.includes('nombre des clients') ||
                                      texteNormalise.includes('fixture');
+        
 
         // Déclenchement UNIQUEMENT si on est après 10h ET que ce n'est pas un rapport officiel
         if (estManagerAutorise && heureActuelle >= 10 && !estUnRapportOfficiel) {
