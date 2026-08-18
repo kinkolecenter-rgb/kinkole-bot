@@ -715,9 +715,19 @@ if (!estPatron) {
         texteNormalise.includes('état des stocks') ||
         texteNormalise.includes('rapport actuel') ||
         texteNormalise.includes('etat actuel') ||
-        texteNormalise.includes('ouverture') ||
         texteNormalise.includes('rapport pos') ||
         texteNormalise.includes('nbre des clients') ||
+        texteNormalise.includes('ouverture') || 
+            texteNormalise.includes('team composition') || 
+            texteNormalise.includes('matériel') || 
+            texteNormalise.includes('materiel') ||
+            texteNormalise.includes('etat d activites') ||
+            texteNormalise.includes('état d activités') ||
+            texteNormalise.includes('rapport actuel') ||
+            texteNormalise.includes('nombre des clients') ||
+            texteNormalise.includes('fixture') ||
+            texteNormalise.includes('charging') ||
+            texteNormalise.includes('connexion') ||
         texteNormalise.includes('nombre des clients')
     );
     const estDejaApprouve = texteNormalise.includes('approuvée') || texteNormalise.includes('approuvee');
@@ -1264,14 +1274,24 @@ if (!estPatron) {
         texteNormalise.includes('achat')
     );
 
-    if (estProbablementRapport) {
-        const analyseLocale = analyserRapport(texteBrut); 
-        let typeLocal = analyseLocale.type;
-        // 🧠 FORÇAGE : Si c'est le rapport de 9h, 11h, etc., on l'oblige à le classer comme "etat_actuel"
-        if (texteNormalise.includes('rapport actuel') || texteNormalise.includes('etat actuel')) {
-            typeLocal = 'etat_actuel';
-        }
-        let iaType = "Non consultée";
+   if (estProbablementRapport) {
+            const analyseLocale = analyserRapport(texteBrut); 
+            let typeLocal = analyseLocale.type;
+            
+            // 🧠 FORÇAGE ABSOLU : On sécurise les étiquettes pour que la Tour de Contrôle les trouve dans la base
+            if (texteNormalise.includes('rapport actuel') || texteNormalise.includes('etat actuel') || texteNormalise.includes('état d activités')) {
+                typeLocal = 'etat_actuel';
+            } else if (texteNormalise.includes('rapport pos')) {
+                typeLocal = 'pos';
+            } else if (texteNormalise.includes('charging')) {
+                typeLocal = 'video_charging';
+            } else if (texteNormalise.includes('connexion 12h') || texteNormalise.includes('connexion 15h') || texteNormalise.includes('connexion 17h') || texteNormalise.includes('détails connexion')) {
+                typeLocal = 'details_connexion';
+            } else if (texteNormalise.includes('dernier rapport') || texteNormalise.includes('etat des stocks')) {
+                typeLocal = 'fermeture';
+            }
+            
+            let iaType = "Non consultée";
         
         if (typeLocal === 'inconnu') {
             try {
