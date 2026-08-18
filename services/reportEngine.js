@@ -90,7 +90,6 @@ function analyserRapport(texte) {
     }
 
     // ==========================================
-   // ==========================================
     // 4. DÉTECTION : NON CLÔTURE / INCIDENT
     // ==========================================
     else if (
@@ -153,6 +152,32 @@ function analyserRapport(texte) {
         donnees = {};
     }
 
+    // ==========================================
+    // 7. RAPPORT POS (Remis à la bonne place !)
+    // ==========================================
+    else if (
+        texteNorm.includes('rapport pos') ||
+        (texteNorm.includes('pos au shop') && texteNorm.includes('pos en panne'))
+    ) {
+        type = 'pos';
+        const matchAbsences = texteNorm.match(/nbre d.absence\s*:?\s*(\d+)/i);
+        donnees = { absences: matchAbsences ? parseInt(matchAbsences[1]) : null };
+    }
+    
+    // ==========================================
+    // 8. RAPPORT ÉTAT ACTUEL (Remis à la bonne place !)
+    // ==========================================
+    else if (
+        texteNorm.includes('rapport actuel') ||
+        texteNorm.includes('etat actuel') ||
+        texteNorm.includes('état actuel') ||
+        ((texteNorm.includes('nbre des clients') || texteNorm.includes('nombre de clients')) &&
+        texteNorm.includes('guichet'))
+    ) {
+        type = 'etat_actuel';
+        donnees = {};
+    }
+
     return {
         est_rapport: type !== 'inconnu',
         type: type,
@@ -179,7 +204,6 @@ function formaterRapportCoffre(texteBrut) {
     if (txt.includes('salaire')) exceptions.push('Salaires');
 
     // 2. Détection des écarts (Surplus / Reliquat)
-    // Va automatiquement capturer des phrases comme "Reliquat de 66.400"
     const matchEcart = txt.match(/(surplus|reliquat)[\s\S]*?(\d+[\.\,]*\d*\s*(cdf|fc)?)/gi);
     if (matchEcart) {
         statut = "À VÉRIFIER ⚠️";
@@ -242,30 +266,6 @@ function formaterRapportCoffre(texteBrut) {
         msg += `*Notes Additionnelles* :\n${extras.map(e => `  - ${e}`).join('\n')}\n`;
     }
     
-    // 7. RAPPORT POS
-    else if (
-        texteNorm.includes('rapport pos') ||
-        (texteNorm.includes('pos au shop') && texteNorm.includes('pos en panne'))
-    ) {
-        type = 'pos';
-        const matchAbsences = texteNorm.match(/nbre d.absence\s*:?\s*(\d+)/i);
-        donnees = { absences: matchAbsences ? parseInt(matchAbsences[1]) : null };
-    }
-    
-    // 8. RAPPORT ÉTAT ACTUEL
-    else if (
-        texteNorm.includes('rapport actuel') ||
-        texteNorm.includes('etat actuel') ||
-        texteNorm.includes('état actuel') ||
-        (texteNorm.includes('nbre des clients') || texteNorm.includes('nombre de clients')) &&
-        texteNorm.includes('guichet')
-    ) {
-        type = 'etat_actuel';
-        donnees = {};
-    }
-
-    
-
     return msg;
 }
 
