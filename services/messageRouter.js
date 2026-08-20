@@ -798,7 +798,7 @@ if (!estPatron) {
 
             if (parleAbsence && !zeroAbsence) {
                 
-                const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé', 'reliquat', 'dette', 'suspendu', 'id'];
+                const justifications = ['malad', 'raison', 'permission', 'retard', 'inconnu', 'sanction', 'renvoi', 'fuite', 'vol', 'décès', 'deces', 'famille', 'deplacement', 'repos', 'conge', 'congé', 'reliquat', 'dette', 'suspendu', 'id', 'cassure', 'cassures', 'dysfonctionnement', 'panne', 'problème', 'probleme'];
                 const aUneJustification = justifications.some(mot => texteNormalise.includes(mot));
                 
                 if (!aUneJustification) {
