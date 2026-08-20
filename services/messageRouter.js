@@ -1264,16 +1264,17 @@ if (!estPatron) {
         texteNormalise.includes('rapport reste caution') ||
         texteNormalise.includes('état d activités') ||
         texteNormalise.includes('etat d activites') ||
-        texteNormalise.includes('rapport actuel') || // 👈 NOUVEAU SYNONYME
-        texteNormalise.includes('etat actuel') ||    // 👈 NOUVEAU SYNONYME
+        texteNormalise.includes("état d'activités") || // 👈 NOUVEAU
+        texteNormalise.includes("etat d'activites") || // 👈 NOUVEAU
+        texteNormalise.includes('rapport actuel') || 
+        texteNormalise.includes('etat actuel') ||    
         texteNormalise.includes('etat actuel du shop') ||
-        texteNormalise.includes('rapport actuel') ||
         texteNormalise.includes('etat materiel') ||
         texteNormalise.includes('taux de change') ||
         texteNormalise.includes('taux') ||
         texteNormalise.includes('achat')
     );
-
+    
    if (estProbablementRapport) {
             const analyseLocale = analyserRapport(texteBrut); 
             let typeLocal = analyseLocale.type;
