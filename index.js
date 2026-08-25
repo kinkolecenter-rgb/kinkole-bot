@@ -38,13 +38,7 @@ const app = express();
 let currentQR = null;
 let isConnected = false;
 let processusDemarres = false; // 👈 Le fameux cadenas anti-doublon
-const redis = new Redis({
-    host: config.redis.host,
-    port: config.redis.port,
-    username: config.redis.username,
-    password: config.redis.password,
-    tls: {}
-});
+const redis = new Redis(process.env.REDIS_URL);
 
 redis.on('connect', () => console.log('✅ Connecté à Upstash Redis'));
 redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
