@@ -38,7 +38,6 @@ const app = express();
 let currentQR = null;
 let isConnected = false;
 let processusDemarres = false; // 👈 Le fameux cadenas anti-doublon
-const Redis = require('ioredis');
 
 const redis = new Redis({
     host: process.env.REDISHOST,       // Le nom exact sur Railway
