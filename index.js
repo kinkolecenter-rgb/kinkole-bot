@@ -38,7 +38,14 @@ const app = express();
 let currentQR = null;
 let isConnected = false;
 let processusDemarres = false; // 👈 Le fameux cadenas anti-doublon
-const redis = new Redis(process.env.REDIS_URL);
+const Redis = require('ioredis');
+
+const redis = new Redis({
+    host: process.env.REDISHOST,       // Le nom exact sur Railway
+    port: process.env.REDISPORT,       // Le nom exact sur Railway
+    password: process.env.REDISPASSWORD, // Le nom exact sur Railway
+    username: 'default'
+});
 
 redis.on('connect', () => console.log('✅ Connecté à Upstash Redis'));
 redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
