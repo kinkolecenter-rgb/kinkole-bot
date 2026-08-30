@@ -49,6 +49,9 @@ redis.on('error', (err) => console.error('❌ Erreur Redis:', err));
 
 function planifierBriefs(assistant) {
     const verifierHeure = () => {
+        // 🛑 LE BOUCLIER : Si WhatsApp est déconnecté, on annule l'envoi et on attend
+        if (!isConnected) return;
+
         const now = new Date();
         const heure = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
         const minutes = now.getMinutes();
