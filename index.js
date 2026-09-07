@@ -110,12 +110,12 @@ async function startBot() {
 
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 console.log('🔴 Session expirée. Nettoyage Redis...');
-                const keys = await redis.keys('kinkole-session-v1:*');
-                if (keys.length > 0) await redis.del(keys);
-                startBot();
+                redis.keys('kinkole-session-v1:*').then(keys => {
+                    if (keys.length > 0) redis.del(keys).then(() => process.exit(1));
+                });
             } else {
-                console.log('🔄 Reconnexion dans 5s...');
-                setTimeout(startBot, 5000);
+                console.log('🔄 Redémarrage forcé pour vider la mémoire (Railway va relancer)...');
+                process.exit(1); // 👈 LA MAGIE EST ICI
             }
         }
 
