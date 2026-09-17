@@ -117,6 +117,7 @@ Types :
 - caution : "Rapport Reste Caution", montants agents
 - non_cloture : "Non clôture", liste d'agents
 - autre : tout autre message opérationnel
+- etat_activite : "État d'activités actuel", clients présents, disponibilité des guichets, effectif du personnel, propreté
 
 IMPORTANT : 
 - "<Médias omis>" seul sans texte → est_rapport=false
