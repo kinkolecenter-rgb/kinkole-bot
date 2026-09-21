@@ -1,6 +1,6 @@
 const util = require('util');
 
-// 🛡️ Le Bouclier Anti-Spam Absolu (Bloque les logs cryptographiques)
+// 🛡️ Le Bouclier Anti-Spam Absolu
 const motsInterdits = [
     'Closing session', 'Removing old closed', 'SessionEntry', 
     '_chains', 'registrationId', 'ephemeralKeyPair', 
@@ -229,7 +229,8 @@ app.get('/', (req, res) => {
     }
 });
 
-app.listen(config.port, () => {
-    console.log(`🌐 Serveur sur port ${config.port}`);
+const PORT = process.env.PORT || config.port || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🌐 Serveur web démarré sur le port ${PORT}`);
     startBot();
 });
