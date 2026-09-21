@@ -1,21 +1,21 @@
-// Supprimer les logs Baileys verbeux
-const originalLog = console.log;
-console.log = (...args) => {
-    const msg = args[0]?.toString() || '';
-    if (
-        msg.includes('Closing session') ||
-        msg.includes('Removing old closed') ||
-        msg.includes('SessionEntry') ||
-        msg.includes('_chains') ||
-        msg.includes('registrationId') ||
-        msg.includes('ephemeralKeyPair') ||
-        msg.includes('Buffer') ||
-        msg.includes('baseKey') ||
-        msg.includes('preKeyId') ||
-        msg.includes('chainKey')
-    ) return; // bloquer ces logs
-    originalLog(...args);
-};
+const util = require('util');
+
+// 🛡️ Le Bouclier Anti-Spam Absolu (Bloque les logs cryptographiques)
+const motsInterdits = [
+    'Closing session', 'Removing old closed', 'SessionEntry', 
+    '_chains', 'registrationId', 'ephemeralKeyPair', 
+    '<Buffer', 'baseKey', 'preKeyId', 'chainKey', 'rootKey', 'currentRatchet'
+];
+
+['log', 'info', 'debug', 'warn'].forEach(method => {
+    const original = console[method];
+    console[method] = (...args) => {
+        const msg = util.format(...args);
+        if (motsInterdits.some(mot => msg.includes(mot))) return; // Bloque le spam
+        original.apply(console, args);
+    };
+});
+
 const { handleIncomingMessage, lancerRattrapageAutomatique, etatAttente, setRedisClient } = require('./services/messageRouter');
 const { initialiserTourDeControle } = require('./services/tourDeControle');
 const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
@@ -111,11 +111,11 @@ async function startBot() {
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 console.log('🔴 Session expirée. Nettoyage Redis...');
                 redis.keys('kinkole-session-v2:*').then(keys => {
-                    if (keys.length > 0) redis.del(keys).then(() => process.exit(1));
+                    if (keys.length > 0) redis.del(keys).then(() => process.exit(0));
                 });
             } else {
                 console.log('🔄 Redémarrage forcé pour vider la mémoire (Railway va relancer)...');
-                process.exit(1); // 👈 LA MAGIE EST ICI
+                process.exit(0); // 👈 LA MAGIE EST ICI
             }
         }
 
