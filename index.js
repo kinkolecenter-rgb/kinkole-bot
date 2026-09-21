@@ -76,7 +76,7 @@ function planifierBriefs(assistant) {
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v1');
+    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v2');
     const memoire = creerMemoire(redis);
 
     const sock = makeWASocket({
@@ -110,7 +110,7 @@ async function startBot() {
 
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 console.log('🔴 Session expirée. Nettoyage Redis...');
-                redis.keys('kinkole-session-v1:*').then(keys => {
+                redis.keys('kinkole-session-v2:*').then(keys => {
                     if (keys.length > 0) redis.del(keys).then(() => process.exit(1));
                 });
             } else {
