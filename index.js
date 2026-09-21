@@ -76,7 +76,7 @@ function planifierBriefs(assistant) {
 
 async function startBot() {
     const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v2');
+    const { state, saveCreds } = await redisStore(redis, 'kinkole-session-v3');
     const memoire = creerMemoire(redis);
 
     const sock = makeWASocket({
@@ -108,14 +108,20 @@ async function startBot() {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             console.log('❌ Connexion fermée. Code:', statusCode);
 
-            if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
-                console.log('🔴 Session expirée. Nettoyage Redis...');
-                redis.keys('kinkole-session-v2:*').then(keys => {
-                    if (keys.length > 0) redis.del(keys).then(() => process.exit(0));
+            // 👇 ON AJOUTE LE CODE 440 POUR BRISER LA BOUCLE
+            if (statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 440) {
+                console.log('🔴 Session expirée ou en conflit. Nettoyage Redis...');
+                
+                redis.keys('kinkole-session-v3:*').then(keys => {
+                    if (keys.length > 0) {
+                        redis.del(keys).then(() => process.exit(0));
+                    } else {
+                        process.exit(0); // 👈 Sécurité pour ne pas rester bloqué si Redis est déjà vide
+                    }
                 });
             } else {
                 console.log('🔄 Redémarrage forcé pour vider la mémoire (Railway va relancer)...');
-                process.exit(0); // 👈 LA MAGIE EST ICI
+                process.exit(0);
             }
         }
 
