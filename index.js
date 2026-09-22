@@ -108,7 +108,6 @@ async function startBot() {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             console.log('❌ Connexion fermée. Code:', statusCode);
 
-            // 👇 ON AJOUTE LE CODE 440 POUR BRISER LA BOUCLE
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 440) {
                 console.log('🔴 Session expirée ou en conflit. Nettoyage Redis...');
                 
@@ -116,12 +115,13 @@ async function startBot() {
                     if (keys.length > 0) {
                         redis.del(keys).then(() => process.exit(0));
                     } else {
-                        process.exit(0); // 👈 Sécurité pour ne pas rester bloqué si Redis est déjà vide
+                        process.exit(0);
                     }
                 });
             } else {
-                console.log('🔄 Redémarrage forcé pour vider la mémoire (Railway va relancer)...');
-                process.exit(0);
+                // 👇 LA CORRECTION EST ICI : On ne fait plus process.exit(0) !
+                console.log(`🔄 Reconnexion à chaud en cours (Code ${statusCode})...`);
+                setTimeout(startBot, 2000); // Relance WhatsApp sans éteindre le serveur web
             }
         }
 
