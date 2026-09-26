@@ -93,6 +93,8 @@ async function appelerIA(systemPrompt, userPrompt) {
 
 // Détecte si un message est un rapport et lequel
 async function detecterTypeRapport(texte, expediteur) {
+
+    const textePropre = texte ? texte.normalize("NFKD") : "";
     const prompt = `Tu es un détecteur de type de message opérationnel pour Winner Bet Kinkole.
 
 RÈGLE PRINCIPALE : Tout message envoyé par un manager dans un groupe opérationnel est un rapport, même sans le mot "rapport".
@@ -130,7 +132,7 @@ IMPORTANT :
 - réponses courtes (Oui, Non, D'accord...)
 
 Message :
-${texte.substring(0, 600)}`;
+${textePropre.substring(0, 600)}`; // 👈 On utilise le texte nettoyé ici !
 
     const resultat = await appelerIA(
         'Tu es un détecteur de rapport. Retourne uniquement du JSON valide sans markdown.',
