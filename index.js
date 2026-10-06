@@ -7,6 +7,15 @@ const motsInterdits = [
     '<Buffer', 'baseKey', 'preKeyId', 'chainKey', 'rootKey', 'currentRatchet'
 ];
 
+// 🛡️ BOUCLIER ANTI-CRASH GLOBAL (Attrape les erreurs internes de Baileys)
+process.on('uncaughtException', (err) => {
+    console.log(`⚠️️ [ANTI-CRASH] Erreur fatale esquivée : ${err.message}`);
+});
+
+process.on('unhandledRejection', (err) => {
+    console.log(`⚠️ [ANTI-CRASH] Rejet de promesse esquivé : ${err.message}`);
+});
+
 ['log', 'info', 'debug', 'warn'].forEach(method => {
     const original = console[method];
     console[method] = (...args) => {
@@ -31,7 +40,6 @@ const creerMemoire = require('./services/memoire');
 const creerAssistant = require('./services/assistant');
 const { agentBrief } = require('./services/agents');
 const { detecterTypeRapport, verifierCompletude, getDestination } = require('./services/routeurRapports');
-
 
 
 const app = express();
